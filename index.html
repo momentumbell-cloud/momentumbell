@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Momentum Bell — Live Watchlist</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <style>
   :root{
     --bg: #0a0c0e;
@@ -26,16 +27,20 @@
   }
   header{
     display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:12px;
     padding:22px 28px 14px; max-width:1020px; margin:0 auto;
   }
-  .brand{ display:flex; align-items:center; gap:10px; }
-  .brand .bell{ font-size:20px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand img.logo{
+    width:42px; height:42px; border-radius:10px; display:block;
+    box-shadow:0 0 18px rgba(233,90,30,.25);
+  }
   .brand h1{
     font-size:16px; font-weight:600; letter-spacing:0.02em; margin:0;
     color:#f2f3f4;
   }
   .brand .sub{ font-size:11.5px; color:var(--dim); margin-top:2px; }
-  .hdr-right{ display:flex; align-items:center; gap:14px; }
+  .hdr-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .live{
     display:flex; align-items:center; gap:7px; font-size:11.5px;
     color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
@@ -50,14 +55,73 @@
     70%{ box-shadow:0 0 0 7px rgba(46,160,67,0); }
     100%{ box-shadow:0 0 0 0 rgba(46,160,67,0); }
   }
-  .sound-btn{
+  .pill-btn{
     display:flex; align-items:center; gap:6px;
     background:var(--panel); border:1px solid var(--line); border-radius:20px;
     color:var(--dim); font-size:11.5px; font-family:var(--sans);
     padding:6px 12px; cursor:pointer; transition:border-color .2s, color .2s;
+    position:relative;
   }
-  .sound-btn:hover{ border-color:#333a42; }
-  .sound-btn.on{ color:var(--hot); border-color:var(--hot-dim); }
+  .pill-btn:hover{ border-color:#333a42; color:var(--text); }
+  .pill-btn.on{ color:var(--hot); border-color:var(--hot-dim); }
+
+  /* Criteria dropdown */
+  .criteria-wrap{ position:relative; }
+  .criteria-panel{
+    display:none; position:absolute; top:36px; right:0; z-index:40;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; width:270px;
+    box-shadow:0 12px 32px rgba(0,0,0,.5);
+    font-size:12.5px; line-height:1.85; color:var(--text);
+  }
+  .criteria-panel.open{ display:block; }
+  .criteria-panel h3{
+    margin:0 0 8px; font-size:11px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--dim); font-weight:600;
+  }
+  .criteria-panel ul{ margin:0; padding:0; list-style:none; }
+  .criteria-panel li{ display:flex; gap:8px; }
+  .criteria-panel li::before{ content:"—"; color:var(--dim); flex:none; }
+
+  /* Feedback modal */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.55);
+    z-index:100; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-backdrop.open{ display:flex; }
+  .modal{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:22px; width:100%; max-width:400px;
+    box-shadow:0 20px 60px rgba(0,0,0,.6);
+  }
+  .modal h3{ margin:0 0 4px; font-size:15px; color:#f2f3f4; }
+  .modal p.hint{ margin:0 0 14px; font-size:11.5px; color:var(--dim); }
+  .modal textarea{
+    width:100%; min-height:110px; resize:vertical;
+    background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    color:var(--text); font-family:var(--sans); font-size:13px;
+    padding:10px 12px; margin-bottom:10px;
+  }
+  .modal input[type=email]{
+    width:100%; background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    color:var(--text); font-family:var(--sans); font-size:13px;
+    padding:9px 12px; margin-bottom:14px;
+  }
+  .modal textarea:focus, .modal input:focus{ outline:1px solid var(--hot); }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; }
+  .btn{
+    font-family:var(--sans); font-size:12.5px; font-weight:600;
+    border:none; border-radius:8px; padding:9px 16px; cursor:pointer;
+  }
+  .btn-ghost{ background:transparent; color:var(--dim); }
+  .btn-ghost:hover{ color:var(--text); }
+  .btn-send{ background:var(--hot); color:#08130a; }
+  .btn-send:hover{ filter:brightness(1.08); }
+  .btn-send:disabled{ opacity:.6; cursor:default; }
+  .modal-status{ font-size:12px; margin-top:10px; }
+  .modal-status.ok{ color:var(--hot); }
+  .modal-status.err{ color:#e5534b; }
+
   main{ max-width:1020px; margin:0 auto; padding:6px 28px 60px; }
   .colhead{
     display:grid; grid-template-columns:1.15fr 0.85fr 0.85fr 1.15fr 0.95fr 0.6fr;
@@ -145,6 +209,7 @@
     .lbl{ display:inline-block; width:90px; }
     .row > div{ display:flex; align-items:center; }
     .news-tip{ right:auto; left:0; }
+    .criteria-panel{ right:auto; left:0; }
   }
 </style>
 </head>
@@ -152,14 +217,24 @@
 
 <header>
   <div class="brand">
-    <span class="bell">🔔</span>
+    <img class="logo" src="logo.png" alt="Momentum Bell">
     <div>
       <h1>Momentum Bell</h1>
       <div class="sub">Live watchlist — updated instantly</div>
     </div>
   </div>
   <div class="hdr-right">
-    <button class="sound-btn" id="sound-toggle" type="button" aria-pressed="false">
+    <div class="criteria-wrap">
+      <button class="pill-btn" id="criteria-btn" type="button">ℹ️ Criteria</button>
+      <div class="criteria-panel" id="criteria-panel">
+        <h3>How tickers qualify</h3>
+        <ul id="criteria-list">
+          <li>Loading current criteria…</li>
+        </ul>
+      </div>
+    </div>
+    <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
+    <button class="pill-btn" id="sound-toggle" type="button" aria-pressed="false">
       <span id="sound-icon">🔇</span><span>Alert sound</span>
     </button>
     <div class="live"><span class="dot"></span><span id="live-label">CONNECTING</span></div>
@@ -192,6 +267,21 @@
 
 <footer>Informational purposes only — not investment advice.</footer>
 
+<!-- ── Feedback modal ─────────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="fb-backdrop">
+  <div class="modal">
+    <h3>Feedback &amp; suggestions</h3>
+    <p class="hint">Goes straight to the Momentum Bell inbox. Include an email below if you'd like a reply.</p>
+    <textarea id="fb-message" placeholder="What's on your mind?"></textarea>
+    <input type="email" id="fb-email" placeholder="Your email (optional)">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="fb-cancel" type="button">Cancel</button>
+      <button class="btn btn-send" id="fb-send" type="button">Send</button>
+    </div>
+    <div class="modal-status" id="fb-status"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
@@ -202,15 +292,20 @@
   // one authenticated account the scanner script signs in as), not from
   // hiding this config. See WEBSITE_SETUP.md.
   const firebaseConfig = {
-    apiKey: "AIzaSyDtjrutqy4x1AGdM90m1HFfugGZQgHh57s",
-    authDomain: "momentum-bell-feed.firebaseapp.com",
-    databaseURL: "https://momentum-bell-feed-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "momentum-bell-feed"
+    apiKey: "AIzaSyDVf8g2Qp-fuIizQKNoLxkEXNLJtMvBsfA",
+    authDomain: "momentum-bell-web.firebaseapp.com",
+    databaseURL: "https://momentum-bell-web-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "momentum-bell-web"
   };
+
+  // Paste your Formspree form ID here (see WEBSITE_SETUP.md Part E).
+  // Looks like "xyzabcde" — the part after "https://formspree.io/f/".
+  const FORMSPREE_FORM_ID = "xaqrozwj";
 
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref("live/watchlist");
+  const criteriaRef = db.ref("live/criteria");
 
   const rowsEl = document.getElementById("rows");
   const emptyEl = document.getElementById("empty");
@@ -218,6 +313,87 @@
   const rowEls = {};   // sym -> DOM row element, so updates animate in place
 
   const STALE_MS = 5 * 60 * 1000;  // hide a row if it hasn't updated in 5 min, even if 'active' was never flipped
+
+  // ── Criteria panel ───────────────────────────────────────────────────────
+  const criteriaBtn = document.getElementById("criteria-btn");
+  const criteriaPanel = document.getElementById("criteria-panel");
+  const criteriaList = document.getElementById("criteria-list");
+  criteriaBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    criteriaPanel.classList.toggle("open");
+  });
+  document.addEventListener("click", (e) => {
+    if (!criteriaPanel.contains(e.target) && e.target !== criteriaBtn){
+      criteriaPanel.classList.remove("open");
+    }
+  });
+  criteriaRef.on("value", snap => {
+    const c = snap.val();
+    if (!c){
+      criteriaList.innerHTML = "<li>Criteria not published yet.</li>";
+      return;
+    }
+    criteriaList.innerHTML = `
+      <li>Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}</li>
+      <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
+      <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>
+      <li>Attention Score at or above ${Number(c.min_attention_score).toFixed(0)}</li>`;
+  });
+
+  // ── Feedback modal ───────────────────────────────────────────────────────
+  const fbBtn = document.getElementById("feedback-btn");
+  const fbBackdrop = document.getElementById("fb-backdrop");
+  const fbMessage = document.getElementById("fb-message");
+  const fbEmail = document.getElementById("fb-email");
+  const fbSend = document.getElementById("fb-send");
+  const fbCancel = document.getElementById("fb-cancel");
+  const fbStatus = document.getElementById("fb-status");
+
+  fbBtn.addEventListener("click", () => {
+    fbBackdrop.classList.add("open");
+    fbStatus.textContent = "";
+    fbStatus.className = "modal-status";
+  });
+  fbCancel.addEventListener("click", () => fbBackdrop.classList.remove("open"));
+  fbBackdrop.addEventListener("click", (e) => { if (e.target === fbBackdrop) fbBackdrop.classList.remove("open"); });
+
+  fbSend.addEventListener("click", async () => {
+    const message = fbMessage.value.trim();
+    if (!message){
+      fbStatus.textContent = "Write a message first.";
+      fbStatus.className = "modal-status err";
+      return;
+    }
+    if (FORMSPREE_FORM_ID === "YOUR_FORMSPREE_ID"){
+      fbStatus.textContent = "Feedback form isn't set up yet.";
+      fbStatus.className = "modal-status err";
+      return;
+    }
+    fbSend.disabled = true;
+    fbStatus.textContent = "Sending…";
+    fbStatus.className = "modal-status";
+    try{
+      const resp = await fetch(`https://formspree.io/f/${FORMSPREE_FORM_ID}`, {
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ message, email: fbEmail.value.trim() || "(not provided)" })
+      });
+      if (resp.ok){
+        fbStatus.textContent = "Thanks — sent!";
+        fbStatus.className = "modal-status ok";
+        fbMessage.value = ""; fbEmail.value = "";
+        setTimeout(() => fbBackdrop.classList.remove("open"), 1200);
+      } else {
+        fbStatus.textContent = "Couldn't send — try again in a moment.";
+        fbStatus.className = "modal-status err";
+      }
+    } catch(e){
+      fbStatus.textContent = "Couldn't send — check your connection.";
+      fbStatus.className = "modal-status err";
+    } finally {
+      fbSend.disabled = false;
+    }
+  });
 
   // ── Sound alert on new ticker ────────────────────────────────────────────
   let soundOn = false;
