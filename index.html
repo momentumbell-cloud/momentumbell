@@ -66,11 +66,16 @@
   }
   .pill-btn:hover{ border-color:#333a42; color:var(--text); }
   .pill-btn.on{ color:var(--hot); border-color:var(--hot-dim); }
+  @keyframes soundHint{
+    0%, 100%{ box-shadow:0 0 0 0 rgba(227,179,65,0); border-color:var(--line); color:var(--dim); }
+    50%{ box-shadow:0 0 0 6px rgba(227,179,65,.16); border-color:var(--warn); color:var(--warn); }
+  }
+  .sound-hint{ animation:soundHint 1.5s ease-in-out 3; }
 
   /* Criteria dropdown */
   .criteria-wrap{ position:relative; }
   .criteria-panel{
-    display:none; position:absolute; top:36px; right:0; z-index:40;
+    display:none; position:absolute; bottom:36px; top:auto; right:0; z-index:40;
     background:var(--panel); border:1px solid var(--line); border-radius:10px;
     padding:14px 16px; width:270px;
     box-shadow:0 12px 32px rgba(0,0,0,.5);
@@ -202,9 +207,15 @@
   }
   .empty b{ color:var(--text); }
   footer{
-    max-width:1020px; margin:0 auto; padding:0 28px 40px;
+    max-width:1020px; margin:0 auto; padding:20px 28px 40px;
     font-size:11px; color:var(--dim); font-family:var(--mono);
   }
+  .footer-actions{
+    display:flex; gap:10px; padding-bottom:16px;
+    border-top:1px solid var(--line); padding-top:20px;
+    font-family:var(--sans);
+  }
+  .footer-note{ font-family:var(--mono); }
   @media (max-width: 720px){
     .colhead{ display:none; }
     .row{ grid-template-columns:1fr; gap:6px; padding:16px 14px; }
@@ -226,18 +237,8 @@
     </div>
   </div>
   <div class="hdr-right">
-    <div class="criteria-wrap">
-      <button class="pill-btn" id="criteria-btn" type="button">ℹ️ Criteria</button>
-      <div class="criteria-panel" id="criteria-panel">
-        <h3>How tickers qualify</h3>
-        <ul id="criteria-list">
-          <li>Loading current criteria…</li>
-        </ul>
-      </div>
-    </div>
-    <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
-    <button class="pill-btn" id="sound-toggle" type="button" aria-pressed="false">
-      <span id="sound-icon">🔇</span><span>Alert sound</span>
+    <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false">
+      <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
     </button>
     <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
   </div>
@@ -267,7 +268,21 @@
   </div>
 </main>
 
-<footer>Informational purposes only — not investment advice.</footer>
+<footer>
+  <div class="footer-actions">
+    <div class="criteria-wrap">
+      <button class="pill-btn" id="criteria-btn" type="button">ℹ️ Criteria</button>
+      <div class="criteria-panel" id="criteria-panel">
+        <h3>How tickers qualify</h3>
+        <ul id="criteria-list">
+          <li>Loading current criteria…</li>
+        </ul>
+      </div>
+    </div>
+    <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
+  </div>
+  <div class="footer-note">Informational purposes only — not investment advice.</div>
+</footer>
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="fb-backdrop">
@@ -318,7 +333,7 @@
   const rowEls = {};   // sym -> DOM row element, so updates animate in place
 
   const STALE_MS = 5 * 60 * 1000;  // hide a row if it hasn't updated in 5 min, even if 'active' was never flipped
-  const STATUS_STALE_MS = 45 * 1000;  // if the script hasn't confirmed "online" in 45s, treat it as offline
+  const STATUS_STALE_MS = 25 * 1000;  // if the script hasn't confirmed "online" in 25s, treat it as offline
 
   // ── LIVE / OFFLINE indicator ─────────────────────────────────────────────
   // Two independent things can make the site "not live": the visitor's own
@@ -418,7 +433,11 @@
       const resp = await fetch(`https://formspree.io/f/${FORMSPREE_FORM_ID}`, {
         method: "POST",
         headers: { "Accept": "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify({ message, email: fbEmail.value.trim() || "(not provided)" })
+        body: JSON.stringify(
+          fbEmail.value.trim()
+            ? { message, email: fbEmail.value.trim() }
+            : { message }
+        )
       });
       if (resp.ok){
         fbStatus.textContent = "Thanks — sent!";
@@ -449,11 +468,14 @@
   let knownSyms = null;   // null = haven't rendered yet, so the first batch never triggers a sound
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
+  const soundLabel = document.getElementById("sound-label");
   soundBtn.addEventListener("click", () => {
     soundOn = !soundOn;
     soundBtn.classList.toggle("on", soundOn);
+    soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
     soundBtn.setAttribute("aria-pressed", String(soundOn));
     soundIcon.textContent = soundOn ? "🔊" : "🔇";
+    soundLabel.textContent = soundOn ? "Sound: On" : "Sound: Off";
     if (soundOn && !audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
