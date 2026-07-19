@@ -50,6 +50,8 @@
     box-shadow:0 0 0 0 rgba(46,160,67,.6);
     animation:pulse 2s infinite;
   }
+  .dot.offline{ background:var(--dim); animation:none; box-shadow:none; }
+  .dot.warn{ background:var(--warn); animation:none; box-shadow:none; }
   @keyframes pulse{
     0%{ box-shadow:0 0 0 0 rgba(46,160,67,.55); }
     70%{ box-shadow:0 0 0 7px rgba(46,160,67,0); }
@@ -237,7 +239,7 @@
     <button class="pill-btn" id="sound-toggle" type="button" aria-pressed="false">
       <span id="sound-icon">🔇</span><span>Alert sound</span>
     </button>
-    <div class="live"><span class="dot"></span><span id="live-label">CONNECTING</span></div>
+    <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
   </div>
 </header>
 
@@ -306,13 +308,53 @@
   const db = firebase.database();
   const ref = db.ref("live/watchlist");
   const criteriaRef = db.ref("live/criteria");
+  const statusRef = db.ref("live/status");
+  const connectedRef = db.ref(".info/connected");
 
   const rowsEl = document.getElementById("rows");
   const emptyEl = document.getElementById("empty");
   const liveLabel = document.getElementById("live-label");
+  const liveDot = document.getElementById("live-dot");
   const rowEls = {};   // sym -> DOM row element, so updates animate in place
 
   const STALE_MS = 5 * 60 * 1000;  // hide a row if it hasn't updated in 5 min, even if 'active' was never flipped
+  const STATUS_STALE_MS = 45 * 1000;  // if the script hasn't confirmed "online" in 45s, treat it as offline
+
+  // ── LIVE / OFFLINE indicator ─────────────────────────────────────────────
+  // Two independent things can make the site "not live": the visitor's own
+  // browser losing its connection to Firebase (rare, shown as
+  // "RECONNECTING"), or the scanner script itself being disconnected from
+  // TWS / its Live dot switched off (shown as "OFFLINE"). The script pushes
+  // a small heartbeat to live/status every ~15s while genuinely online, so
+  // if that heartbeat goes stale — even without a fresh push telling us so —
+  // this page still flips to OFFLINE on its own via the periodic recheck.
+  let firebaseConnected = true;
+  let lastStatus = null;
+  connectedRef.on("value", snap => {
+    firebaseConnected = snap.val() === true;
+    renderLiveIndicator();
+  });
+  statusRef.on("value", snap => {
+    lastStatus = snap.val();
+    renderLiveIndicator();
+  });
+  setInterval(renderLiveIndicator, 5000);   // catches staleness even with no new pushes at all
+
+  function renderLiveIndicator(){
+    const now = Date.now();
+    const scriptOnline = !!(lastStatus && lastStatus.online === true
+                             && (now - (lastStatus.ts || 0)) < STATUS_STALE_MS);
+    liveDot.classList.remove("offline", "warn");
+    if (!firebaseConnected){
+      liveLabel.textContent = "RECONNECTING";
+      liveDot.classList.add("warn");
+    } else if (scriptOnline){
+      liveLabel.textContent = "LIVE";
+    } else {
+      liveLabel.textContent = "OFFLINE";
+      liveDot.classList.add("offline");
+    }
+  }
 
   // ── Criteria panel ───────────────────────────────────────────────────────
   const criteriaBtn = document.getElementById("criteria-btn");
@@ -384,7 +426,13 @@
         fbMessage.value = ""; fbEmail.value = "";
         setTimeout(() => fbBackdrop.classList.remove("open"), 1200);
       } else {
-        fbStatus.textContent = "Couldn't send — try again in a moment.";
+        let detail = "";
+        try {
+          const body = await resp.json();
+          detail = (body.errors && body.errors.map(e => e.message).join("; "))
+                   || body.error || "";
+        } catch(_e){ /* body wasn't JSON — ignore */ }
+        fbStatus.textContent = `Couldn't send (${resp.status})${detail ? ": " + detail : ""}.`;
         fbStatus.className = "modal-status err";
       }
     } catch(e){
@@ -550,10 +598,8 @@
   }
 
   ref.on("value", snap => {
-    liveLabel.textContent = "LIVE";
     render(snap.val());
   }, err => {
-    liveLabel.textContent = "RECONNECTING";
     console.error(err);
   });
 </script>
