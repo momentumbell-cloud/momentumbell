@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Momentum Bell — Live Watchlist</title>
+<style>
+  :root{
+    --bg: #0a0c0e;
+    --panel: #111417;
+    --line: #1e2328;
+    --text: #d7dade;
+    --dim: #6b7280;
+    --hot: #2ea043;
+    --hot-dim: #1a3d24;
+    --warn: #e3b341;
+    --warn-dim: #3a2f14;
+    --mono: 'SFMono-Regular', 'JetBrains Mono', Consolas, Menlo, monospace;
+    --sans: -apple-system, 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 28px 14px; max-width:960px; margin:0 auto;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .bell{ font-size:20px; }
+  .brand h1{
+    font-size:16px; font-weight:600; letter-spacing:0.02em; margin:0;
+    color:#f2f3f4;
+  }
+  .brand .sub{ font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .live{
+    display:flex; align-items:center; gap:7px; font-size:11.5px;
+    color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
+  }
+  .dot{
+    width:7px; height:7px; border-radius:50%; background:var(--hot);
+    box-shadow:0 0 0 0 rgba(46,160,67,.6);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(46,160,67,.55); }
+    70%{ box-shadow:0 0 0 7px rgba(46,160,67,0); }
+    100%{ box-shadow:0 0 0 0 rgba(46,160,67,0); }
+  }
+  main{ max-width:960px; margin:0 auto; padding:6px 28px 60px; }
+  .colhead{
+    display:grid; grid-template-columns:1.3fr 1.1fr 1fr 1fr 1fr;
+    padding:10px 14px; font-size:10.5px; text-transform:uppercase;
+    letter-spacing:0.08em; color:var(--dim); border-bottom:1px solid var(--line);
+  }
+  .colhead .score-head{
+    position:relative; display:inline-flex; align-items:center; gap:5px;
+    cursor:help; width:fit-content;
+  }
+  .info-dot{
+    width:13px; height:13px; border-radius:50%; border:1px solid var(--dim);
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:9px; font-style:normal; color:var(--dim); line-height:1;
+  }
+  .legend{
+    display:none; position:absolute; top:20px; left:0; z-index:20;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; width:190px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+    font-size:11px; text-transform:none; letter-spacing:0; line-height:1.7;
+  }
+  .score-head:hover .legend{ display:block; }
+  .legend-row{ display:flex; align-items:center; gap:7px; color:var(--text); }
+  .legend-sw{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .rows{ display:flex; flex-direction:column; }
+  .row{
+    display:grid; grid-template-columns:1.3fr 1.1fr 1fr 1fr 1fr;
+    align-items:center; padding:14px; border-bottom:1px solid var(--line);
+    position:relative; overflow:hidden;
+    animation:flashin .5s ease-out;
+  }
+  @keyframes flashin{
+    0%{ background:rgba(46,160,67,0.16); }
+    100%{ background:transparent; }
+  }
+  .row .bar{
+    position:absolute; left:0; top:0; bottom:0; z-index:0;
+    transition:width .35s ease, background .35s ease;
+  }
+  .row > *{ position:relative; z-index:1; }
+  .sym{ font-family:var(--mono); font-weight:700; font-size:15px; color:#f2f3f4; }
+  .visit{
+    font-family:var(--mono); font-size:10px; color:var(--dim);
+    margin-left:8px; padding:1px 6px; border:1px solid var(--line); border-radius:20px;
+  }
+  .score{ font-family:var(--mono); font-size:15px; font-weight:700; }
+  .score.hot{ color:var(--hot); }
+  .score.warm{ color:var(--warn); }
+  .score.cool{ color:var(--dim); }
+  .price{ font-family:var(--mono); font-size:14px; color:var(--text); }
+  .chg{ font-family:var(--mono); font-size:14px; font-weight:600; }
+  .chg.pos{ color:var(--hot); }
+  .chg.neg{ color:#e5534b; }
+  .maxchg{ font-family:var(--mono); font-size:14px; font-weight:600; color:var(--text); }
+  .lbl{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; display:none; }
+  .empty{
+    padding:70px 14px; text-align:center; color:var(--dim);
+    font-size:13.5px; line-height:1.6;
+  }
+  .empty b{ color:var(--text); }
+  footer{
+    max-width:960px; margin:0 auto; padding:0 28px 40px;
+    font-size:11px; color:var(--dim); font-family:var(--mono);
+  }
+  @media (max-width: 640px){
+    .colhead{ display:none; }
+    .row{ grid-template-columns:1fr; gap:6px; padding:16px 14px; }
+    .lbl{ display:inline-block; width:80px; }
+    .row > div{ display:flex; align-items:center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="bell">🔔</span>
+    <div>
+      <h1>Momentum Bell</h1>
+      <div class="sub">Live watchlist — updated instantly</div>
+    </div>
+  </div>
+  <div class="live"><span class="dot"></span><span id="live-label">CONNECTING</span></div>
+</header>
+
+<main>
+  <div class="colhead">
+    <div>Symbol</div>
+    <div class="score-head">
+      Attention Score
+      <i class="info-dot">i</i>
+      <div class="legend">
+        <div class="legend-row"><span class="legend-sw" style="background:var(--hot)"></span> Above 100 — high attention</div>
+        <div class="legend-row"><span class="legend-sw" style="background:var(--warn)"></span> 70–100 — building attention</div>
+        <div class="legend-row"><span class="legend-sw" style="background:var(--dim)"></span> Below 70 — neutral</div>
+      </div>
+    </div>
+    <div>Price</div><div>Change</div><div>Max Change</div>
+  </div>
+  <div class="rows" id="rows"></div>
+  <div class="empty" id="empty" style="display:none;">
+    No active movers right now.<br>
+    <b>Momentum Bell</b> updates the instant a ticker qualifies — leave this open.
+  </div>
+</main>
+
+<footer>Informational purposes only — not investment advice.</footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script>
+  // ── Paste your own Firebase project's web config here ──────────────────
+  // Project settings (gear icon, top left) → General → Your apps → Web app.
+  // These values are NOT secret — Firebase's security comes from the
+  // Realtime Database rules (read-only for everyone, write only for the
+  // one authenticated account the scanner script signs in as), not from
+  // hiding this config. See WEBSITE_SETUP.md.
+  const firebaseConfig = {
+    apiKey: "AIzaSyDtjrutqy4x1AGdM90m1HFfugGZQgHh57s",
+    authDomain: "momentum-bell-feed.firebaseapp.com",
+    databaseURL: "https://momentum-bell-feed-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "momentum-bell-feed"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const ref = db.ref("live/watchlist");
+
+  const rowsEl = document.getElementById("rows");
+  const emptyEl = document.getElementById("empty");
+  const liveLabel = document.getElementById("live-label");
+  const rowEls = {};   // sym -> DOM row element, so updates animate in place
+
+  const STALE_MS = 5 * 60 * 1000;  // hide a row if it hasn't updated in 5 min, even if 'active' was never flipped
+
+  // Attention Score is derived from the underlying feed value server-side;
+  // this page only ever deals with the score itself.
+  function attentionScore(d){
+    return (d.tpm || 0) / 10;
+  }
+
+  function scoreClass(score){
+    if (score > 100) return "hot";
+    if (score >= 70) return "warm";
+    return "cool";
+  }
+
+  function barColor(cls){
+    if (cls === "hot")  return "linear-gradient(90deg, var(--hot-dim), transparent)";
+    if (cls === "warm") return "linear-gradient(90deg, var(--warn-dim), transparent)";
+    return "linear-gradient(90deg, #1a1e23, transparent)";
+  }
+
+  function render(data){
+    const now = Date.now();
+    const entries = Object.values(data || {})
+      .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS)
+      .map(d => ({ ...d, _score: attentionScore(d) }))
+      .sort((a, b) => b._score - a._score);
+
+    const seen = new Set();
+
+    entries.forEach(d => {
+      seen.add(d.sym);
+      let el = rowEls[d.sym];
+      if (!el){
+        el = document.createElement("div");
+        el.className = "row";
+        rowsEl.appendChild(el);
+        rowEls[d.sym] = el;
+      } else {
+        // re-trigger the flash animation on update
+        el.style.animation = "none";
+        void el.offsetWidth;
+        el.style.animation = "";
+      }
+      const cls = scoreClass(d._score);
+      const pct = Math.max(0, Math.min(100, d._score));
+      const chgSign = (d.chg || 0) >= 0 ? "+" : "";
+      const chgClass = (d.chg || 0) >= 0 ? "pos" : "neg";
+      const maxChgSign = (d.max_chg || 0) >= 0 ? "+" : "";
+      el.innerHTML = `
+        <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
+        <div class="sym">${d.sym}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}</div>
+        <div><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
+        <div><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
+        <div><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
+        <div><span class="lbl">Max Change</span><span class="maxchg">${maxChgSign}${(d.max_chg ?? d.chg ?? 0).toFixed(1)}%</span></div>`;
+    });
+
+    // remove rows no longer present/active
+    Object.keys(rowEls).forEach(sym => {
+      if (!seen.has(sym)){
+        rowEls[sym].remove();
+        delete rowEls[sym];
+      }
+    });
+
+    // keep DOM order matching sorted order
+    entries.forEach(d => rowsEl.appendChild(rowEls[d.sym]));
+
+    emptyEl.style.display = entries.length ? "none" : "block";
+  }
+
+  function ordinal(n){
+    const s = ["th","st","nd","rd"], v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  }
+
+  ref.on("value", snap => {
+    liveLabel.textContent = "LIVE";
+    render(snap.val());
+  }, err => {
+    liveLabel.textContent = "RECONNECTING";
+    console.error(err);
+  });
+</script>
+</body>
+</html>
