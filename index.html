@@ -164,12 +164,17 @@
     display:grid; grid-template-columns:1.15fr 0.85fr 0.85fr 1.15fr 0.95fr 0.6fr;
     align-items:center; padding:14px; border-bottom:1px solid var(--line);
     position:relative; overflow:hidden;
-    animation:flashin .5s ease-out;
   }
-  @keyframes flashin{
+  @keyframes flash-strong{
     0%{ background:rgba(46,160,67,0.16); }
     100%{ background:transparent; }
   }
+  @keyframes flash-weak{
+    0%{ background:rgba(227,179,65,0.09); }
+    100%{ background:transparent; }
+  }
+  .row.flash-strong{ animation:flash-strong .5s ease-out; }
+  .row.flash-weak{ animation:flash-weak .5s ease-out; }
   .row .bar{
     position:absolute; left:0; top:0; bottom:0; z-index:0;
     transition:width .35s ease, background .35s ease;
@@ -191,21 +196,35 @@
   .maxchg{ font-family:var(--mono); font-size:14px; font-weight:600; color:var(--text); }
   .lbl{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; display:none; }
   .news-cell{ position:relative; }
-  .news-wrap{ position:relative; display:inline-block; cursor:default; }
+  .news-wrap{ display:inline-block; cursor:pointer; }
   .news-icon{ font-size:15px; }
-  .news-tip{
-    display:none; position:absolute; top:22px; right:0; z-index:30;
+  #news-tip{
+    display:none; position:fixed; z-index:200;
     background:var(--panel); border:1px solid var(--line); border-radius:8px;
-    padding:10px 12px; width:260px; max-height:220px; overflow-y:auto;
-    box-shadow:0 8px 24px rgba(0,0,0,.45);
+    padding:10px 12px; width:270px; max-height:260px; overflow-y:auto;
+    box-shadow:0 8px 28px rgba(0,0,0,.5);
     font-size:11.5px; line-height:1.55; color:var(--text);
   }
-  .news-wrap:hover .news-tip{ display:block; }
+  #news-tip.open{ display:block; }
   .empty{
     padding:70px 14px; text-align:center; color:var(--dim);
     font-size:13.5px; line-height:1.6;
   }
   .empty b{ color:var(--text); }
+
+  .dropped-section{ margin-top:8px; }
+  .dropped-section h2{
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--dim); font-weight:600; margin:0 0 2px; padding:16px 14px 8px;
+    border-top:1px solid var(--line);
+  }
+  .dropped-rows{ display:flex; flex-direction:column; }
+  .dropped-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; border-bottom:1px solid var(--line);
+  }
+  .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
+  .dropped-row .maxchg{ font-size:13px; }
   footer{
     max-width:1020px; margin:0 auto; padding:20px 28px 40px;
     font-size:11px; color:var(--dim); font-family:var(--mono);
@@ -221,7 +240,6 @@
     .row{ grid-template-columns:1fr; gap:6px; padding:16px 14px; }
     .lbl{ display:inline-block; width:90px; }
     .row > div{ display:flex; align-items:center; }
-    .news-tip{ right:auto; left:0; }
     .criteria-panel{ right:auto; left:0; }
   }
 </style>
@@ -233,7 +251,7 @@
     <img class="logo" src="logo.png" alt="Momentum Bell">
     <div>
       <h1>Momentum Bell</h1>
-      <div class="sub">Live watchlist — updated instantly</div>
+      <div class="sub">Premarket · Live watchlist — updated instantly</div>
     </div>
   </div>
   <div class="hdr-right">
@@ -266,7 +284,14 @@
     No active movers right now.<br>
     <b>Momentum Bell</b> updates the instant a ticker qualifies — leave this open.
   </div>
+
+  <div class="dropped-section" id="dropped-section" style="display:none;">
+    <h2>Dropped from watchlist today</h2>
+    <div class="dropped-rows" id="dropped-rows"></div>
+  </div>
 </main>
+
+<div id="news-tip"></div>
 
 <footer>
   <div class="footer-actions">
@@ -328,6 +353,8 @@
 
   const rowsEl = document.getElementById("rows");
   const emptyEl = document.getElementById("empty");
+  const droppedSection = document.getElementById("dropped-section");
+  const droppedRowsEl = document.getElementById("dropped-rows");
   const liveLabel = document.getElementById("live-label");
   const liveDot = document.getElementById("live-dot");
   const rowEls = {};   // sym -> DOM row element, so updates animate in place
@@ -495,6 +522,58 @@
     o.start(now); o.stop(now + 0.42);
   }
 
+  // ── News popup — one shared, fixed-position tooltip, click-driven so it
+  // works identically on desktop and mobile, and is never clipped by a
+  // row's own bounds (the old per-row hover tooltip could get cut off).
+  const newsTip = document.getElementById("news-tip");
+  let newsTipSym = null;
+  let newsBySym = {};
+
+  function openNewsTip(anchorEl, sym){
+    const items = newsBySym[sym] || [];
+    if (!items.length) return;
+    newsTip.innerHTML = items.map(h => "• " + escapeHtml(h)).join("<br><br>");
+    newsTip.classList.add("open");
+    newsTipSym = sym;
+    positionNewsTip(anchorEl);
+  }
+  function closeNewsTip(){
+    newsTip.classList.remove("open");
+    newsTipSym = null;
+  }
+  function positionNewsTip(anchorEl){
+    const rect = anchorEl.getBoundingClientRect();
+    const margin = 8;
+    newsTip.style.left = "0px"; newsTip.style.top = "0px";  // reset so measurement below isn't skewed by a stale position
+    const tipW = newsTip.offsetWidth || 270;
+    let left = Math.min(Math.max(margin, rect.left), window.innerWidth - tipW - margin);
+    let top = rect.bottom + 6;
+    newsTip.style.left = left + "px";
+    newsTip.style.top = top + "px";
+    requestAnimationFrame(() => {
+      const tipH = newsTip.offsetHeight;
+      if (top + tipH > window.innerHeight - margin){
+        newsTip.style.top = Math.max(margin, rect.top - tipH - 6) + "px";
+      }
+    });
+  }
+  document.addEventListener("click", (e) => {
+    const wrap = e.target.closest(".news-wrap");
+    if (wrap){
+      e.stopPropagation();
+      const sym = wrap.dataset.sym;
+      if (newsTipSym === sym && newsTip.classList.contains("open")){
+        closeNewsTip();
+      } else {
+        openNewsTip(wrap, sym);
+      }
+      return;
+    }
+    if (!newsTip.contains(e.target)) closeNewsTip();
+  });
+  window.addEventListener("scroll", closeNewsTip, true);
+  window.addEventListener("resize", closeNewsTip);
+
   // ── Sorting ───────────────────────────────────────────────────────────────
   let sortKey = "score";
   let sortDir = "desc";
@@ -548,6 +627,7 @@
 
   function render(data){
     lastData = data;
+    closeNewsTip();
     const now = Date.now();
     const entries = Object.values(data || {})
       .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS)
@@ -562,23 +642,30 @@
     }
     knownSyms = currentSyms;
 
+    newsBySym = {};
+    entries.forEach(d => { newsBySym[d.sym] = Array.isArray(d.news) ? d.news : []; });
+
     const seen = new Set();
 
     entries.forEach(d => {
       seen.add(d.sym);
       let el = rowEls[d.sym];
+      const cls = scoreClass(d._score);
       if (!el){
         el = document.createElement("div");
         el.className = "row";
         rowsEl.appendChild(el);
         rowEls[d.sym] = el;
+        if (cls === "hot") el.classList.add("flash-strong");
+        else if (cls === "warm") el.classList.add("flash-weak");
       } else {
-        // re-trigger the flash animation on update
-        el.style.animation = "none";
+        // re-trigger the flash animation on update — only for warm/hot tiers;
+        // neutral tickers just update quietly with no flash
+        el.classList.remove("flash-strong", "flash-weak");
         void el.offsetWidth;
-        el.style.animation = "";
+        if (cls === "hot") el.classList.add("flash-strong");
+        else if (cls === "warm") el.classList.add("flash-weak");
       }
-      const cls = scoreClass(d._score);
       const pct = Math.max(0, Math.min(100, d._score));
       const chgSign = (d.chg || 0) >= 0 ? "+" : "";
       const chgClass = (d.chg || 0) >= 0 ? "pos" : "neg";
@@ -586,9 +673,7 @@
       const maxChgSign = maxChgVal >= 0 ? "+" : "";
       const news = Array.isArray(d.news) ? d.news : [];
       const newsCell = news.length
-        ? `<span class="news-wrap"><span class="news-icon">🗞</span>
-             <div class="news-tip">${news.map(h => "• " + escapeHtml(h)).join("<br><br>")}</div>
-           </span>`
+        ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
         : "";
       el.innerHTML = `
         <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
@@ -612,6 +697,24 @@
     entries.forEach(d => rowsEl.appendChild(rowEls[d.sym]));
 
     emptyEl.style.display = entries.length ? "none" : "block";
+    renderDropped(data);
+  }
+
+  function renderDropped(data){
+    const dropped = Object.values(data || {})
+      .filter(d => d && d.active === false && d.reason === "dropped")
+      .sort((a, b) => (b.max_chg ?? b.chg ?? 0) - (a.max_chg ?? a.chg ?? 0));
+
+    droppedSection.style.display = dropped.length ? "block" : "none";
+    droppedRowsEl.innerHTML = dropped.map(d => {
+      const maxChgVal = d.max_chg ?? d.chg ?? 0;
+      const sign = maxChgVal >= 0 ? "+" : "";
+      const cls = maxChgVal >= 0 ? "pos" : "neg";
+      return `<div class="dropped-row">
+                <span class="sym">${escapeHtml(d.sym)}</span>
+                <span class="maxchg chg ${cls}">${sign}${maxChgVal.toFixed(1)}%</span>
+              </div>`;
+    }).join("");
   }
 
   function ordinal(n){
