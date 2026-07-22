@@ -212,15 +212,24 @@
   }
   .empty b{ color:var(--text); }
 
+  .sound-wrap{ position:relative; display:inline-flex; align-items:center; gap:4px; }
+
   .dropped-section{ margin-top:8px; }
   .dropped-section h2{
+    display:flex; align-items:center; gap:6px; position:relative;
     font-size:11px; text-transform:uppercase; letter-spacing:.08em;
-    color:var(--dim); font-weight:600; margin:0 0 2px; padding:16px 14px 8px;
+    color:var(--dim); font-weight:600; margin:0; padding:16px 14px 4px;
     border-top:1px solid var(--line);
   }
+  .dropped-colhead{
+    display:flex; align-items:center; gap:10px; position:relative;
+    padding:0 14px 8px; font-size:10px; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--dim);
+  }
+  .dropped-colhead .maxchg-head{ display:inline-flex; align-items:center; gap:4px; position:relative; }
   .dropped-rows{ display:flex; flex-direction:column; }
   .dropped-row{
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; align-items:center; gap:12px;
     padding:10px 14px; border-bottom:1px solid var(--line);
   }
   .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
@@ -255,9 +264,16 @@
     </div>
   </div>
   <div class="hdr-right">
-    <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false">
-      <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
-    </button>
+    <div class="sound-wrap">
+      <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false">
+        <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
+      </button>
+      <i class="info-dot">i</i>
+      <div class="legend">
+        <div class="legend-row" style="align-items:flex-start;">🔔🔔 Two-tone chime — a ticker's first appearance today.</div>
+        <div class="legend-row" style="align-items:flex-start; margin-top:6px;">🔔 Single tone — a repeat appearance of the same ticker.</div>
+      </div>
+    </div>
     <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
   </div>
 </header>
@@ -286,7 +302,23 @@
   </div>
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
-    <h2>Dropped from watchlist today</h2>
+    <h2>
+      Dropped from watchlist today
+      <i class="info-dot">i</i>
+      <div class="legend" id="drop-criteria-legend" style="width:230px;">
+        Loading current drop criteria…
+      </div>
+    </h2>
+    <div class="dropped-colhead">
+      <span>Symbol</span>
+      <span class="maxchg-head">
+        Max Change%
+        <i class="info-dot">i</i>
+        <div class="legend" style="width:210px;">
+          The highest Change% this ticker reached while it was on the watchlist — not its current price change.
+        </div>
+      </span>
+    </div>
     <div class="dropped-rows" id="dropped-rows"></div>
   </div>
 </main>
@@ -413,8 +445,10 @@
   });
   criteriaRef.on("value", snap => {
     const c = snap.val();
+    const dropLegend = document.getElementById("drop-criteria-legend");
     if (!c){
       criteriaList.innerHTML = "<li>Criteria not published yet.</li>";
+      if (dropLegend) dropLegend.textContent = "Drop criteria not published yet.";
       return;
     }
     criteriaList.innerHTML = `
@@ -422,6 +456,12 @@
       <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
       <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>
       <li>Attention Score at or above ${Number(c.min_attention_score).toFixed(0)}</li>`;
+    if (dropLegend){
+      const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
+      dropLegend.textContent = graceMin != null
+        ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand.`
+        : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand.";
+    }
   });
 
   // ── Feedback modal ───────────────────────────────────────────────────────
@@ -507,7 +547,28 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
   });
-  function playAlertBeep(){
+  // Two distinct alert tones: a clearer two-tone chime the first time a
+  // ticker appears today, and the original single tone for any repeat
+  // appearance of the same ticker (visit > 1) — so a first-time mover
+  // stands out from the crowd instead of sounding identical to a re-alert.
+  function playAlertBeepFirst(){
+    if (!audioCtx) return;
+    const ctx = audioCtx;
+    const now = ctx.currentTime;
+    [880, 1320].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.value = 0.0001;
+      o.connect(g); g.connect(ctx.destination);
+      const t0 = now + i * 0.13;
+      g.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      o.start(t0); o.stop(t0 + 0.24);
+    });
+  }
+  function playAlertBeepRepeat(){
     if (!audioCtx) return;
     const ctx = audioCtx;
     const o = ctx.createOscillator();
@@ -638,7 +699,12 @@
 
     const currentSyms = new Set(entries.map(d => d.sym));
     if (knownSyms !== null && soundOn){
-      entries.forEach(d => { if (!knownSyms.has(d.sym)) playAlertBeep(); });
+      entries.forEach(d => {
+        if (!knownSyms.has(d.sym)){
+          if (d.visit && d.visit > 1) playAlertBeepRepeat();
+          else playAlertBeepFirst();
+        }
+      });
     }
     knownSyms = currentSyms;
 
