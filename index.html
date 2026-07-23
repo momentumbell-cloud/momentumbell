@@ -32,8 +32,8 @@
   }
   .brand{ display:flex; align-items:center; gap:12px; }
   .brand img.logo{
-    width:42px; height:42px; border-radius:10px; display:block;
-    box-shadow:0 0 18px rgba(233,90,30,.25);
+    width:44px; height:44px; display:block;
+    filter:drop-shadow(0 0 10px rgba(46,160,67,.35));
   }
   .brand h1{
     font-size:16px; font-weight:600; letter-spacing:0.02em; margin:0;
@@ -156,7 +156,7 @@
     font-size:11px; text-transform:none; letter-spacing:0; line-height:1.7;
     cursor:default;
   }
-  .info-dot:hover + .legend, .legend:hover{ display:block; }
+  .info-dot:hover + .legend, .legend:hover, .legend.open{ display:block; }
   .legend-row{ display:flex; align-items:center; gap:7px; color:var(--text); }
   .legend-sw{ width:9px; height:9px; border-radius:50%; flex:none; }
   .rows{ display:flex; flex-direction:column; }
@@ -217,23 +217,17 @@
   .dropped-section{ margin-top:8px; }
   .dropped-section h2{
     display:flex; align-items:center; gap:6px; position:relative;
-    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
-    color:var(--dim); font-weight:600; margin:0; padding:16px 14px 4px;
-    border-top:1px solid var(--line);
+    font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--dim); font-weight:600; margin:0; padding:16px 14px 8px;
+    border-top:1px solid var(--line); line-height:1.5;
   }
-  .dropped-colhead{
-    display:flex; align-items:center; gap:10px; position:relative;
-    padding:0 14px 8px; font-size:10px; text-transform:uppercase;
-    letter-spacing:.06em; color:var(--dim);
-  }
-  .dropped-colhead .maxchg-head{ display:inline-flex; align-items:center; gap:4px; position:relative; }
   .dropped-rows{ display:flex; flex-direction:column; }
   .dropped-row{
-    display:flex; align-items:center; gap:12px;
+    display:flex; align-items:center; gap:8px;
     padding:10px 14px; border-bottom:1px solid var(--line);
   }
   .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
-  .dropped-row .maxchg{ font-size:13px; }
+  .dropped-row .maxchg{ font-size:13px; color:var(--text); font-family:var(--mono); font-weight:600; }
   footer{
     max-width:1020px; margin:0 auto; padding:20px 28px 40px;
     font-size:11px; color:var(--dim); font-family:var(--mono);
@@ -260,7 +254,7 @@
     <img class="logo" src="logo.png" alt="Momentum Bell">
     <div>
       <h1>Momentum Bell</h1>
-      <div class="sub">Premarket · Live watchlist — updated instantly</div>
+      <div class="sub">Live watchlist - Premarket version</div>
     </div>
   </div>
   <div class="hdr-right">
@@ -303,22 +297,12 @@
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
     <h2>
-      Dropped from watchlist today
+      Dropped from watchlist today — number shown is max Change% reached
       <i class="info-dot">i</i>
       <div class="legend" id="drop-criteria-legend" style="width:230px;">
         Loading current drop criteria…
       </div>
     </h2>
-    <div class="dropped-colhead">
-      <span>Symbol</span>
-      <span class="maxchg-head">
-        Max Change%
-        <i class="info-dot">i</i>
-        <div class="legend" style="width:210px;">
-          The highest Change% this ticker reached while it was on the watchlist — not its current price change.
-        </div>
-      </span>
-    </div>
     <div class="dropped-rows" id="dropped-rows"></div>
   </div>
 </main>
@@ -443,6 +427,56 @@
       criteriaPanel.classList.remove("open");
     }
   });
+
+  // ── Generic info-dot tooltips (Attention Score, Sound, Dropped-section,
+  // Max Change clarification) — hover still works for desktop via the
+  // plain CSS rule, and this adds tap-to-show / tap-elsewhere-to-hide for
+  // touch devices, which don't have hover at all. Opening one via click
+  // also repositions it with the same viewport-clamping the news tip
+  // uses, so it can never run off-screen on a narrow phone.
+  function closeAllLegends(){
+    document.querySelectorAll(".legend.open").forEach(el => {
+      el.classList.remove("open");
+      el.style.position = ""; el.style.left = ""; el.style.top = "";
+      el.style.right = ""; el.style.bottom = "";
+    });
+  }
+  function positionLegendNearDot(dot, legend){
+    const margin = 8;
+    legend.style.position = "fixed";
+    legend.style.right = "auto"; legend.style.bottom = "auto";
+    const rect = dot.getBoundingClientRect();
+    const legendW = legend.offsetWidth || 220;
+    let left = Math.min(Math.max(margin, rect.left), window.innerWidth - legendW - margin);
+    let top = rect.bottom + 6;
+    legend.style.left = left + "px";
+    legend.style.top = top + "px";
+    requestAnimationFrame(() => {
+      const h = legend.offsetHeight;
+      if (top + h > window.innerHeight - margin){
+        legend.style.top = Math.max(margin, rect.top - h - 6) + "px";
+      }
+    });
+  }
+  document.addEventListener("click", (e) => {
+    const dot = e.target.closest(".info-dot");
+    if (dot){
+      e.stopPropagation();
+      const legend = dot.nextElementSibling;
+      if (!legend || !legend.classList.contains("legend")) return;
+      const isOpen = legend.classList.contains("open");
+      closeAllLegends();
+      if (!isOpen){
+        legend.classList.add("open");
+        positionLegendNearDot(dot, legend);
+      }
+      return;
+    }
+    if (!e.target.closest(".legend")){
+      closeAllLegends();
+    }
+  });
+
   criteriaRef.on("value", snap => {
     const c = snap.val();
     const dropLegend = document.getElementById("drop-criteria-legend");
@@ -632,8 +666,8 @@
     }
     if (!newsTip.contains(e.target)) closeNewsTip();
   });
-  window.addEventListener("scroll", closeNewsTip, true);
-  window.addEventListener("resize", closeNewsTip);
+  window.addEventListener("scroll", () => { closeNewsTip(); closeAllLegends(); }, true);
+  window.addEventListener("resize", () => { closeNewsTip(); closeAllLegends(); });
 
   // ── Sorting ───────────────────────────────────────────────────────────────
   let sortKey = "score";
@@ -688,7 +722,14 @@
 
   function render(data){
     lastData = data;
-    closeNewsTip();
+    // Only close the news tip if the ticker it's showing has genuinely
+    // gone away — NOT on every refresh. Rows get fully rebuilt below on
+    // every live update (ticks arrive constantly), so naively closing it
+    // here made the tooltip disappear almost as soon as it opened; it now
+    // survives refreshes and gets repositioned/refreshed further down.
+    if (newsTipSym && !(data && data[newsTipSym] && data[newsTipSym].active !== false)){
+      closeNewsTip();
+    }
     const now = Date.now();
     const entries = Object.values(data || {})
       .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS)
@@ -762,6 +803,19 @@
     // keep DOM order matching sorted order
     entries.forEach(d => rowsEl.appendChild(rowEls[d.sym]));
 
+    // The row that owns any currently-open news tip was just rebuilt from
+    // scratch (innerHTML above) — its old .news-wrap element is gone, so
+    // re-anchor to the fresh one and refresh the tip's content in place.
+    if (newsTipSym && newsTip.classList.contains("open")){
+      const freshWrap = rowEls[newsTipSym] && rowEls[newsTipSym].querySelector(".news-wrap");
+      if (freshWrap){
+        newsTip.innerHTML = (newsBySym[newsTipSym] || []).map(h => "• " + escapeHtml(h)).join("<br><br>");
+        positionNewsTip(freshWrap);
+      } else {
+        closeNewsTip();   // ticker's news disappeared (no longer has any) — nothing sensible left to show
+      }
+    }
+
     emptyEl.style.display = entries.length ? "none" : "block";
     renderDropped(data);
   }
@@ -775,10 +829,9 @@
     droppedRowsEl.innerHTML = dropped.map(d => {
       const maxChgVal = d.max_chg ?? d.chg ?? 0;
       const sign = maxChgVal >= 0 ? "+" : "";
-      const cls = maxChgVal >= 0 ? "pos" : "neg";
       return `<div class="dropped-row">
                 <span class="sym">${escapeHtml(d.sym)}</span>
-                <span class="maxchg chg ${cls}">${sign}${maxChgVal.toFixed(1)}%</span>
+                <span class="maxchg">${sign}${maxChgVal.toFixed(1)}%</span>
               </div>`;
     }).join("");
   }
