@@ -128,6 +128,9 @@
   .modal-status{ font-size:12px; margin-top:10px; }
   .modal-status.ok{ color:var(--hot); }
   .modal-status.err{ color:#e5534b; }
+  .howto-list{ margin:0 0 14px; padding:0 0 0 18px; font-size:13px; line-height:1.65; color:var(--text); }
+  .howto-list li{ margin-bottom:8px; }
+  .howto-list b{ color:#f2f3f4; }
 
   main{ max-width:1020px; margin:0 auto; padding:6px 28px 60px; }
   .colhead{
@@ -198,6 +201,7 @@
   .news-cell{ position:relative; }
   .news-wrap{ display:inline-block; cursor:pointer; }
   .news-icon{ font-size:15px; }
+  .news-inline{ display:none; }
   #news-tip{
     display:none; position:fixed; z-index:200;
     background:var(--panel); border:1px solid var(--line); border-radius:8px;
@@ -240,8 +244,24 @@
   .footer-note{ font-family:var(--mono); }
   @media (max-width: 720px){
     .colhead{ display:none; }
-    .row{ grid-template-columns:1fr; gap:6px; padding:16px 14px; }
-    .lbl{ display:inline-block; width:90px; }
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "sym    sym"
+        "chg    price"
+        "score  maxchg";
+      column-gap:16px; row-gap:8px;
+      padding:14px 14px;
+    }
+    .cell-sym{ grid-area: sym; }
+    .cell-chg{ grid-area: chg; }
+    .cell-price{ grid-area: price; }
+    .cell-score{ grid-area: score; }
+    .cell-maxchg{ grid-area: maxchg; }
+    .cell-news{ display:none !important; }   /* desktop's dedicated News column — replaced by the inline icon next to the symbol below */
+    .news-inline{ display:inline-block; margin-left:8px; vertical-align:middle; }
+    .lbl{ display:inline-block; width:80px; }
     .row > div{ display:flex; align-items:center; }
     .criteria-panel{ right:auto; left:0; }
   }
@@ -320,10 +340,30 @@
         </ul>
       </div>
     </div>
+    <button class="pill-btn" id="howto-btn" type="button">❓ How to Use</button>
     <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
   </div>
   <div class="footer-note">Informational purposes only — not investment advice.</div>
 </footer>
+
+<!-- ── How to Use modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="howto-backdrop">
+  <div class="modal">
+    <h3>How to use this page</h3>
+    <ul class="howto-list">
+      <li><b>Attention Score</b> — green = high attention right now, orange = building, gray = quiet.</li>
+      <li><b>Change%</b> — how much it's moved today, right now.</li>
+      <li><b>Max Change%</b> — the highest it moved today, even if it's cooled off since.</li>
+      <li><b>🗞 icon</b> — tap it to read the latest headlines on that ticker.</li>
+      <li>Tap any column header (Change%, Price, Attention Score, Max Change) to sort by it.</li>
+      <li><b>Dropped from watchlist</b>, below the table, shows tickers that lost qualifying momentum today — figure shown is the peak they reached while active.</li>
+    </ul>
+    <p class="hint">A live feed for spotting momentum — not investment advice. Always do your own research.</p>
+    <div class="modal-actions">
+      <button class="btn btn-send" id="howto-close" type="button">Got it</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="fb-backdrop">
@@ -497,6 +537,14 @@
         : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand.";
     }
   });
+
+  // ── How to Use modal ─────────────────────────────────────────────────────
+  const howtoBtn = document.getElementById("howto-btn");
+  const howtoBackdrop = document.getElementById("howto-backdrop");
+  const howtoClose = document.getElementById("howto-close");
+  howtoBtn.addEventListener("click", () => howtoBackdrop.classList.add("open"));
+  howtoClose.addEventListener("click", () => howtoBackdrop.classList.remove("open"));
+  howtoBackdrop.addEventListener("click", (e) => { if (e.target === howtoBackdrop) howtoBackdrop.classList.remove("open"); });
 
   // ── Feedback modal ───────────────────────────────────────────────────────
   const fbBtn = document.getElementById("feedback-btn");
@@ -779,17 +827,17 @@
       const maxChgVal = d.max_chg ?? d.chg ?? 0;
       const maxChgSign = maxChgVal >= 0 ? "+" : "";
       const news = Array.isArray(d.news) ? d.news : [];
-      const newsCell = news.length
+      const newsIcon = news.length
         ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
         : "";
       el.innerHTML = `
         <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
-        <div class="sym">${escapeHtml(d.sym)}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}</div>
-        <div><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
-        <div><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
-        <div><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
-        <div><span class="lbl">Max Change</span><span class="maxchg">${maxChgSign}${maxChgVal.toFixed(1)}%</span></div>
-        <div class="news-cell"><span class="lbl">News</span>${newsCell}</div>`;
+        <div class="cell-sym sym">${escapeHtml(d.sym)}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}<span class="news-inline">${newsIcon}</span></div>
+        <div class="cell-chg"><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
+        <div class="cell-price"><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
+        <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
+        <div class="cell-maxchg"><span class="lbl">Max Change</span><span class="maxchg">${maxChgSign}${maxChgVal.toFixed(1)}%</span></div>
+        <div class="cell-news news-cell">${newsIcon}</div>`;
     });
 
     // remove rows no longer present/active
@@ -806,8 +854,12 @@
     // The row that owns any currently-open news tip was just rebuilt from
     // scratch (innerHTML above) — its old .news-wrap element is gone, so
     // re-anchor to the fresh one and refresh the tip's content in place.
+    // There are two .news-wrap candidates per row now (a desktop one in
+    // its own column, a mobile one inline beside the symbol) — only one
+    // is ever visible at a time via CSS, so pick whichever actually is.
     if (newsTipSym && newsTip.classList.contains("open")){
-      const freshWrap = rowEls[newsTipSym] && rowEls[newsTipSym].querySelector(".news-wrap");
+      const candidates = rowEls[newsTipSym] ? rowEls[newsTipSym].querySelectorAll(".news-wrap") : [];
+      const freshWrap = Array.from(candidates).find(el => el.offsetParent !== null);
       if (freshWrap){
         newsTip.innerHTML = (newsBySym[newsTipSym] || []).map(h => "• " + escapeHtml(h)).join("<br><br>");
         positionNewsTip(freshWrap);
