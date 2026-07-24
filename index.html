@@ -225,10 +225,11 @@
     color:var(--dim); font-weight:600; margin:0; padding:16px 14px 8px;
     border-top:1px solid var(--line); line-height:1.5;
   }
-  .dropped-rows{ display:flex; flex-direction:column; }
+  .dropped-rows{ display:flex; flex-wrap:wrap; border-top:1px solid var(--line); border-left:1px solid var(--line); }
   .dropped-row{
     display:flex; align-items:center; gap:8px;
-    padding:10px 14px; border-bottom:1px solid var(--line);
+    padding:10px 16px;
+    border-right:1px solid var(--line); border-bottom:1px solid var(--line);
   }
   .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
   .dropped-row .maxchg{ font-size:13px; color:var(--text); font-family:var(--mono); font-weight:600; }
