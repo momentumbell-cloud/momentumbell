@@ -103,6 +103,19 @@
   }
   .modal h3{ margin:0 0 4px; font-size:15px; color:#f2f3f4; }
   .modal p.hint{ margin:0 0 14px; font-size:11.5px; color:var(--dim); }
+  .chart-modal{ max-width:700px; }
+  .chart-modal-hdr{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .chart-modal-hdr h3{ margin:0; font-size:17px; font-family:var(--mono); }
+  .chart-close-btn{
+    background:none; border:none; color:var(--dim); font-size:20px;
+    cursor:pointer; line-height:1; padding:2px 6px;
+  }
+  .chart-close-btn:hover{ color:var(--text); }
+  #tv_chart_container{ width:100%; height:420px; background:var(--bg); border-radius:8px; overflow:hidden; }
+  .chart-modal p.hint{ margin:10px 0 0; }
   .modal textarea{
     width:100%; min-height:110px; resize:vertical;
     background:var(--bg); border:1px solid var(--line); border-radius:8px;
@@ -183,7 +196,8 @@
     transition:width .35s ease, background .35s ease;
   }
   .row > *{ position:relative; z-index:1; }
-  .sym{ font-family:var(--mono); font-weight:700; font-size:15px; color:#f2f3f4; }
+  .sym{ font-family:var(--mono); font-weight:700; font-size:15px; color:#f2f3f4; cursor:pointer; }
+  .sym:hover{ text-decoration:underline; text-underline-offset:3px; }
   .visit{
     font-family:var(--mono); font-size:10px; color:var(--dim);
     margin-left:8px; padding:1px 6px; border:1px solid var(--line); border-radius:20px;
@@ -356,6 +370,7 @@
       <li><b>Change%</b> — how much it's moved today, right now.</li>
       <li><b>Max Change%</b> — the highest it moved today, even if it's cooled off since.</li>
       <li><b>🗞 icon</b> — tap it to read the latest headlines on that ticker.</li>
+      <li>Tap a <b>symbol</b> to see its 1-minute chart.</li>
       <li>Tap any column header (Change%, Price, Attention Score, Max Change) to sort by it.</li>
       <li><b>Dropped from watchlist</b>, below the table, shows tickers that lost qualifying momentum today — figure shown is the peak they reached while active.</li>
     </ul>
@@ -363,6 +378,18 @@
     <div class="modal-actions">
       <button class="btn btn-send" id="howto-close" type="button">Got it</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Chart modal ───────────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="chart-backdrop">
+  <div class="modal chart-modal">
+    <div class="chart-modal-hdr">
+      <h3 id="chart-modal-title">—</h3>
+      <button class="chart-close-btn" id="chart-close" type="button">✕</button>
+    </div>
+    <div id="tv_chart_container"></div>
+    <p class="hint">1-minute chart — a true seconds-level feed isn't available from any free source.</p>
   </div>
 </div>
 
@@ -546,6 +573,67 @@
   howtoBtn.addEventListener("click", () => howtoBackdrop.classList.add("open"));
   howtoClose.addEventListener("click", () => howtoBackdrop.classList.remove("open"));
   howtoBackdrop.addEventListener("click", (e) => { if (e.target === howtoBackdrop) howtoBackdrop.classList.remove("open"); });
+
+  // ── Chart modal — TradingView's free embeddable widget (tv.js), loaded
+  // only on first use. No API key, no signup, and it renders inside our
+  // own page (an in-page widget, not a redirect to tradingview.com). Free
+  // embedding tops out at 1-minute bars — true seconds-level charts are a
+  // paid TradingView feature with no free equivalent anywhere.
+  const chartBackdrop = document.getElementById("chart-backdrop");
+  const chartTitle = document.getElementById("chart-modal-title");
+  const chartClose = document.getElementById("chart-close");
+  const chartContainer = document.getElementById("tv_chart_container");
+  let tvScriptPromise = null;
+  function loadTVScript(){
+    if (!tvScriptPromise){
+      tvScriptPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://s3.tradingview.com/tv.js";
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+    return tvScriptPromise;
+  }
+  async function openChart(sym){
+    closeNewsTip();
+    closeAllLegends();
+    chartTitle.textContent = sym;
+    chartBackdrop.classList.add("open");
+    chartContainer.innerHTML = "";
+    try{
+      await loadTVScript();
+      new TradingView.widget({
+        autosize: true,
+        symbol: sym,
+        interval: "1",
+        timezone: "America/New_York",
+        theme: "dark",
+        style: "1",
+        locale: "en",
+        toolbar_bg: "#0a0c0e",
+        enable_publishing: false,
+        hide_side_toolbar: true,
+        allow_symbol_change: false,
+        withdateranges: false,
+        container_id: "tv_chart_container"
+      });
+    } catch(e){
+      chartContainer.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px;padding:20px;text-align:center;'>Chart couldn't load — check your connection and try again.</div>";
+    }
+  }
+  function closeChart(){
+    chartBackdrop.classList.remove("open");
+    chartContainer.innerHTML = "";   // stop the widget rather than leave it running hidden
+  }
+  chartClose.addEventListener("click", closeChart);
+  chartBackdrop.addEventListener("click", (e) => { if (e.target === chartBackdrop) closeChart(); });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".news-wrap")) return;   // news icon handles its own click
+    const symEl = e.target.closest(".cell-sym");
+    if (symEl && symEl.dataset.sym) openChart(symEl.dataset.sym);
+  });
 
   // ── Feedback modal ───────────────────────────────────────────────────────
   const fbBtn = document.getElementById("feedback-btn");
@@ -833,7 +921,7 @@
         : "";
       el.innerHTML = `
         <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
-        <div class="cell-sym sym">${escapeHtml(d.sym)}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}<span class="news-inline">${newsIcon}</span></div>
+        <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${escapeHtml(d.sym)}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}<span class="news-inline">${newsIcon}</span></div>
         <div class="cell-chg"><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
         <div class="cell-price"><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
         <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
