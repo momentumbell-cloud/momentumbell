@@ -331,7 +331,7 @@
     <div class="sortable" data-key="chg">Change% <span class="sort-arrow" data-key="chg"></span></div>
     <div class="sortable" data-key="price">Price <span class="sort-arrow" data-key="price"></span></div>
     <div class="sortable score-head" data-key="score">
-      Attention Score <span class="sort-arrow" data-key="score"></span>
+      Momentum Bell Score <span class="sort-arrow" data-key="score"></span>
       <i class="info-dot">i</i>
       <div class="legend">
         <div class="legend-row"><span class="legend-sw" style="background:var(--hot)"></span> Above 100 — high attention</div>
@@ -384,12 +384,12 @@
   <div class="modal">
     <h3>How to use this page</h3>
     <ul class="howto-list">
-      <li><b>Attention Score</b> — green = high attention right now, orange = building, gray = quiet.</li>
+      <li><b>Momentum Bell Score</b> — green = high attention right now, orange = building, gray = quiet.</li>
       <li><b>Change%</b> — how much it's moved today, right now.</li>
       <li><b>Max Change%</b> — the highest it moved today, even if it's cooled off since.</li>
       <li><b>🗞 icon</b> — tap it to read the latest headlines on that ticker.</li>
       <li>Tap a <b>symbol</b> to see its 1-minute chart.</li>
-      <li>Tap any column header (Change%, Price, Attention Score, Max Change) to sort by it.</li>
+      <li>Tap any column header (Change%, Price, Momentum Bell Score, Max Change) to sort by it.</li>
       <li><b>Removed from watchlist</b>, below the table, shows tickers that no longer match the qualifying criteria — they're not gone by mistake, they simply stopped meeting the bar. Figure shown is the peak they reached while active.</li>
     </ul>
     <p class="hint">A live feed for spotting momentum — not investment advice. Always do your own research.</p>
@@ -592,7 +592,7 @@
       <li>Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}</li>
       <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
       <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>
-      <li>Attention Score at or above ${Number(c.min_attention_score).toFixed(0)}</li>`;
+      <li>Momentum Bell Score at or above ${Number(c.min_attention_score).toFixed(0)}</li>`;
     if (dropLegend){
       const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
       dropLegend.textContent = graceMin != null
