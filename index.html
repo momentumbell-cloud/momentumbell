@@ -350,10 +350,10 @@
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
     <h2>
-      Dropped from watchlist today — number shown is max Change% reached
+      Removed from watchlist today — no longer matching the criteria, number shown is max Change% reached
       <i class="info-dot">i</i>
       <div class="legend" id="drop-criteria-legend" style="width:230px;">
-        Loading current drop criteria…
+        Loading current removal criteria…
       </div>
     </h2>
     <div class="dropped-rows" id="dropped-rows"></div>
@@ -390,7 +390,7 @@
       <li><b>🗞 icon</b> — tap it to read the latest headlines on that ticker.</li>
       <li>Tap a <b>symbol</b> to see its 1-minute chart.</li>
       <li>Tap any column header (Change%, Price, Attention Score, Max Change) to sort by it.</li>
-      <li><b>Dropped from watchlist</b>, below the table, shows tickers that lost qualifying momentum today — figure shown is the peak they reached while active.</li>
+      <li><b>Removed from watchlist</b>, below the table, shows tickers that no longer match the qualifying criteria — they're not gone by mistake, they simply stopped meeting the bar. Figure shown is the peak they reached while active.</li>
     </ul>
     <p class="hint">A live feed for spotting momentum — not investment advice. Always do your own research.</p>
     <div class="modal-actions">
@@ -585,7 +585,7 @@
     const dropLegend = document.getElementById("drop-criteria-legend");
     if (!c){
       criteriaList.innerHTML = "<li>Criteria not published yet.</li>";
-      if (dropLegend) dropLegend.textContent = "Drop criteria not published yet.";
+      if (dropLegend) dropLegend.textContent = "Removal criteria not published yet.";
       return;
     }
     criteriaList.innerHTML = `
@@ -596,8 +596,8 @@
     if (dropLegend){
       const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
       dropLegend.textContent = graceMin != null
-        ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand.`
-        : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand.";
+        ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand. This is expected behavior, not an error.`
+        : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand. This is expected behavior, not an error.";
     }
   });
 
