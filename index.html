@@ -140,6 +140,17 @@
   .btn-send:disabled{ opacity:.6; cursor:default; }
   .modal-status{ font-size:12px; margin-top:10px; }
   .modal-status.ok{ color:var(--hot); }
+
+  /* Copy-to-clipboard toast — brief confirmation after tapping a ticker */
+  #copy-toast{
+    position:fixed; left:50%; bottom:28px; transform:translate(-50%, 12px);
+    background:var(--panel); border:1px solid var(--hot-dim); color:var(--hot);
+    font-family:var(--mono); font-size:12.5px; font-weight:700;
+    padding:9px 16px; border-radius:8px; pointer-events:none;
+    opacity:0; transition:opacity .15s ease, transform .15s ease;
+    z-index:200; white-space:nowrap;
+  }
+  #copy-toast.show{ opacity:1; transform:translate(-50%, 0); }
   .modal-status.err{ color:#e5534b; }
   .howto-list{ margin:0 0 14px; padding:0 0 0 18px; font-size:13px; line-height:1.65; color:var(--text); }
   .howto-list li{ margin-bottom:8px; }
@@ -299,6 +310,8 @@
 </style>
 </head>
 <body>
+
+<div id="copy-toast"></div>
 
 <div class="et-clock" id="et-clock" title="Current time — US market (Eastern)">--:-- ET</div>
 
@@ -652,6 +665,7 @@
         hide_side_toolbar: true,
         allow_symbol_change: false,
         withdateranges: false,
+        extended_hours_trading: true,
         container_id: "tv_chart_container"
       });
     } catch(e){
@@ -664,10 +678,40 @@
   }
   chartClose.addEventListener("click", closeChart);
   chartBackdrop.addEventListener("click", (e) => { if (e.target === chartBackdrop) closeChart(); });
+  // ── Copy ticker to clipboard ──────────────────────────────────────────
+  const copyToast = document.getElementById("copy-toast");
+  let copyToastTimer = null;
+  function copySymbol(sym){
+    const done = () => {
+      copyToast.textContent = `${sym} copied`;
+      copyToast.classList.add("show");
+      clearTimeout(copyToastTimer);
+      copyToastTimer = setTimeout(() => copyToast.classList.remove("show"), 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(sym).then(done).catch(() => fallbackCopy(sym, done));
+    } else {
+      fallbackCopy(sym, done);
+    }
+  }
+  function fallbackCopy(text, done){
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+
   document.addEventListener("click", (e) => {
     if (e.target.closest(".news-wrap")) return;   // news icon handles its own click
     const symEl = e.target.closest(".cell-sym");
-    if (symEl && symEl.dataset.sym) openChart(symEl.dataset.sym);
+    if (symEl && symEl.dataset.sym){
+      copySymbol(symEl.dataset.sym);
+      openChart(symEl.dataset.sym);
+    }
   });
 
   // ── Feedback modal ───────────────────────────────────────────────────────
@@ -1006,7 +1050,7 @@
       const maxChgVal = d.max_chg ?? d.chg ?? 0;
       const sign = maxChgVal >= 0 ? "+" : "";
       return `<div class="dropped-row">
-                <span class="sym">${escapeHtml(d.sym)}</span>
+                <span class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${escapeHtml(d.sym)}</span>
                 <span class="maxchg">${sign}${maxChgVal.toFixed(1)}%</span>
               </div>`;
     }).join("");
