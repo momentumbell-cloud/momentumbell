@@ -497,11 +497,12 @@
   // ── LIVE / OFFLINE indicator ─────────────────────────────────────────────
   // Two independent things can make the site "not live": the visitor's own
   // browser losing its connection to Firebase (rare, shown as
-  // "RECONNECTING"), or the scanner script itself being disconnected from
-  // TWS / its Live dot switched off (shown as "OFFLINE"). The script pushes
-  // a small heartbeat to live/status every ~15s while genuinely online, so
-  // if that heartbeat goes stale — even without a fresh push telling us so —
-  // this page still flips to OFFLINE on its own via the periodic recheck.
+  // "RECONNECTING"), or the scanner script itself losing its own upstream
+  // connection / its Live dot switched off (shown as "OFFLINE"). The script
+  // pushes a small heartbeat to live/status every ~15s while genuinely
+  // online, so if that heartbeat goes stale — even without a fresh push
+  // telling us so — this page still flips to OFFLINE on its own via the
+  // periodic recheck.
   let firebaseConnected = true;
   let lastStatus = null;
   connectedRef.on("value", snap => {
@@ -913,10 +914,12 @@
   });
   updateSortIndicators();
 
-  // Attention Score is derived from the underlying feed value server-side;
-  // this page only ever deals with the score itself.
+  // The Attention Score shown on every row is computed server-side and
+  // pushed already-final — this page just displays it as-is. Deliberate:
+  // keeps the underlying feed metric and however it's weighted off this
+  // page's source entirely, not just out of the rendered UI.
   function attentionScore(d){
-    return (d.tpm || 0) / 10;
+    return d.score || 0;
   }
   function scoreClass(score){
     if (score > 100) return "hot";
