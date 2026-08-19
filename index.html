@@ -116,6 +116,76 @@
   .chart-close-btn:hover{ color:var(--text); }
   #tv_chart_container{ width:100%; height:420px; background:var(--bg); border-radius:8px; overflow:hidden; }
   .chart-modal p.hint{ margin:10px 0 0; }
+
+  /* ── Daily Disclaimer overlay ─────────────────────────────────────────
+     Shown once per calendar day (per browser) on first visit — see
+     shouldShowDisclaimerToday()/markDisclaimerAckToday(). Deliberately
+     large (covers most of the viewport) and NOT dismissible by clicking
+     the backdrop or an X — the only way through is the acknowledge
+     button, and that button stays disabled until the checkbox is
+     checked, so this can't be reflexively click-through-dismissed. */
+  .disclaimer-modal{
+    max-width:640px; width:100%; max-height:88vh;
+    display:flex; flex-direction:column; padding:0; overflow:hidden;
+  }
+  .disclaimer-modal .disc-hdr{
+    padding:22px 26px 14px; border-bottom:1px solid var(--line); flex:none;
+  }
+  .disclaimer-modal .disc-hdr h3{ margin:0 0 4px; font-size:17px; }
+  .disclaimer-modal .disc-hdr p{ margin:0; font-size:11.5px; color:var(--dim); }
+  .disclaimer-modal .disc-body{
+    padding:18px 26px; overflow-y:auto; font-size:13px; line-height:1.65; flex:1 1 auto;
+  }
+  .disclaimer-modal .disc-body ul{ margin:8px 0; padding-left:20px; }
+  .disclaimer-modal .disc-body li{ margin-bottom:7px; }
+  .disclaimer-modal .disc-body b{ color:#f2f3f4; }
+  .disclaimer-modal .disc-body a{ color:var(--warn); }
+  .disclaimer-modal .disc-footer{
+    padding:16px 26px 22px; border-top:1px solid var(--line); flex:none;
+  }
+  .disc-ack-row{
+    display:flex; align-items:flex-start; gap:9px; font-size:12px;
+    color:var(--text); margin-bottom:14px; cursor:pointer;
+  }
+  .disc-ack-row input[type=checkbox]{ margin-top:2px; flex:none; width:15px; height:15px; accent-color:var(--hot); cursor:pointer; }
+
+  /* ── First-visit Guide modal ─────────────────────────────────────────
+     Shown once ever (per browser) the first time a new visitor gets past
+     the daily disclaimer — see shouldShowGuide()/markGuideSeen(). Walks
+     through the color-coded Score, sound, and the Feedback button using
+     a hypothetical mock-up of the watchlist (real markup styled to match
+     the live rows exactly) rather than a static screenshot, so it never
+     goes stale if the row design changes. */
+  .guide-modal{ max-width:460px; }
+  .guide-modal .guide-step{ display:none; }
+  .guide-modal .guide-step.active{ display:block; }
+  .guide-dots{ display:flex; gap:6px; justify-content:center; margin:14px 0 2px; }
+  .guide-dot{ width:6px; height:6px; border-radius:50%; background:var(--line); }
+  .guide-dot.active{ background:var(--hot); }
+  .mock-screenshot{
+    background:var(--bg); border:1px solid var(--line); border-radius:8px;
+    padding:4px 0; margin:10px 0 14px; overflow:hidden;
+  }
+  .mock-row{
+    display:grid; grid-template-columns:1fr 0.7fr 0.7fr; align-items:center;
+    padding:9px 12px; border-bottom:1px solid var(--line); font-size:12.5px;
+  }
+  .mock-row:last-child{ border-bottom:none; }
+  .mock-row .m-sym{ font-family:var(--mono); font-weight:700; color:#f2f3f4; }
+  .mock-row .m-chg{ font-family:var(--mono); color:var(--hot); font-weight:600; }
+  .mock-row .m-score{ font-family:var(--mono); font-weight:700; text-align:right; }
+  .mock-row .m-score.hot{ color:var(--hot); }
+  .mock-row .m-score.warm{ color:var(--warn); }
+  .mock-row .m-score.cool{ color:var(--dim); }
+  .guide-legend{ list-style:none; margin:0 0 14px; padding:0; font-size:12.5px; line-height:1.7; }
+  .guide-legend li{ display:flex; align-items:flex-start; gap:8px; }
+  .guide-sw{ width:10px; height:10px; border-radius:50%; margin-top:4px; flex:none; }
+  .guide-sound-demo{
+    display:inline-flex; align-items:center; gap:6px; background:var(--panel);
+    border:1px solid var(--hot-dim); border-radius:20px; color:var(--hot);
+    font-size:11.5px; padding:5px 11px; margin:4px 0 2px;
+  }
+  .guide-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
   .modal textarea{
     width:100%; min-height:110px; resize:vertical;
     background:var(--bg); border:1px solid var(--line); border-radius:8px;
@@ -137,7 +207,7 @@
   .btn-ghost:hover{ color:var(--text); }
   .btn-send{ background:var(--hot); color:#08130a; }
   .btn-send:hover{ filter:brightness(1.08); }
-  .btn-send:disabled{ opacity:.6; cursor:default; }
+  .btn-send:disabled{ opacity:.6; cursor:default; background:var(--line); color:var(--dim); }
   .modal-status{ font-size:12px; margin-top:10px; }
   .modal-status.ok{ color:var(--hot); }
 
@@ -439,6 +509,86 @@
   </div>
 </div>
 
+<!-- ── Daily Disclaimer overlay — shown once per day, must acknowledge ── -->
+<div class="modal-backdrop" id="disc-backdrop">
+  <div class="modal disclaimer-modal">
+    <div class="disc-hdr">
+      <h3>⚠ Before you continue</h3>
+      <p>Please read — this appears once per day.</p>
+    </div>
+    <div class="disc-body">
+      <p><b>Momentum Bell is 100% informational.</b> Nothing on this page is investment advice, and nothing here is a recommendation to buy or sell any security.</p>
+      <ul>
+        <li>Every ticker shown here is doing so because it mechanically matched a rules-based filter (price, % change, volume, trade frequency) applied identically to the entire market — it is <b>not</b> a personal recommendation to you or anyone else.</li>
+        <li><b>Trading — especially fast-moving, high-volatility momentum stocks — involves substantial risk of loss</b>, up to and including the loss of your entire investment. Past performance is not indicative of future results.</li>
+        <li>Data shown (prices, % change, volume, trade counts) comes from third-party sources and may be <b>delayed, incomplete, or interrupted</b>. Confirm anything important directly with your broker or exchange before acting on it.</li>
+        <li>We are not a registered investment adviser, broker-dealer, or financial analyst, and using this site creates no advisory or fiduciary relationship.</li>
+        <li>This site is intended for adults (18+) and is not directed at residents of any jurisdiction where its content would be contrary to local law.</li>
+      </ul>
+      <p>Full details: <a href="disclaimer.html" target="_blank" rel="noopener">Disclaimer &amp; Terms of Use</a> · <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a></p>
+    </div>
+    <div class="disc-footer">
+      <label class="disc-ack-row">
+        <input type="checkbox" id="disc-checkbox">
+        <span>I have read the above, I understand this is not investment advice, and I accept the full Disclaimer &amp; Terms of Use.</span>
+      </label>
+      <div class="modal-actions">
+        <button class="btn btn-send" id="disc-ack-btn" type="button" disabled>I Understand &amp; Acknowledge</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── First-visit Guide modal — shown once ever, new visitors only ───── -->
+<div class="modal-backdrop" id="guide-backdrop">
+  <div class="modal guide-modal">
+
+    <div class="guide-step active" data-step="1">
+      <h3>👋 Welcome to Momentum Bell</h3>
+      <p class="hint">A quick guide to reading this page — three short steps.</p>
+      <p style="font-size:13px; margin:0 0 4px;">Every row is a ticker currently matching our momentum criteria, ranked by a live <b>Momentum Bell Score</b>. Here's a hypothetical example of what you'll see:</p>
+      <div class="mock-screenshot">
+        <div class="mock-row"><span class="m-sym">ABCD</span><span class="m-chg">+42.3%</span><span class="m-score hot">128</span></div>
+        <div class="mock-row"><span class="m-sym">WXYZ</span><span class="m-chg">+31.7%</span><span class="m-score warm">84</span></div>
+        <div class="mock-row"><span class="m-sym">QRST</span><span class="m-chg">+30.1%</span><span class="m-score cool">52</span></div>
+      </div>
+      <p class="hint">(These four tickers and figures are made up, purely to illustrate the three status colors below.)</p>
+    </div>
+
+    <div class="guide-step" data-step="2">
+      <h3>🎨 What the colors mean</h3>
+      <p class="hint">The Momentum Bell Score color tells you how much attention a ticker is getting right now.</p>
+      <ul class="guide-legend">
+        <li><span class="guide-sw" style="background:var(--hot)"></span> <b>Green — above 100.</b> High attention right now; this is the kind of move that tends to attract other traders and keep going.</li>
+        <li><span class="guide-sw" style="background:var(--warn)"></span> <b>Amber — 70 to 100.</b> Building attention; worth watching, not yet as heated as green.</li>
+        <li><span class="guide-sw" style="background:var(--dim)"></span> <b>Gray/Neutral — below 70.</b> Quiet for now; it qualified for the list but isn't drawing heavy attention yet.</li>
+      </ul>
+      <p style="font-size:13px; margin:0;">Tap any ticker symbol to pull up its 1-minute chart, and the 🗞 icon for its latest headlines.</p>
+    </div>
+
+    <div class="guide-step" data-step="3">
+      <h3>🔔 Turn sound on</h3>
+      <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page to get an audio alert the instant a new ticker qualifies — no need to keep watching the screen.</p>
+      <div class="guide-sound-demo">🔊 Sound: On</div>
+      <ul class="guide-legend" style="margin-top:10px;">
+        <li>🔔🔔 <b>Two-tone bell</b> — a ticker's first appearance today.</li>
+        <li>🔔 <b>Single bell</b> — a repeat appearance of the same ticker.</li>
+      </ul>
+      <p class="hint" style="margin-top:12px;">One last thing — if anything here is confusing or you think of something that would make this more useful, tap <b>💬 Feedback</b> in the footer any time. Your feedback genuinely shapes what we build next.</p>
+    </div>
+
+    <div class="guide-dots">
+      <span class="guide-dot active" data-dot="1"></span>
+      <span class="guide-dot" data-dot="2"></span>
+      <span class="guide-dot" data-dot="3"></span>
+    </div>
+    <div class="guide-nav">
+      <button class="btn btn-ghost" id="guide-skip" type="button">Skip</button>
+      <button class="btn btn-send" id="guide-next" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
 <script>
@@ -490,6 +640,90 @@
   }
   updateETClock();
   setInterval(updateETClock, 15000);   // recomputed often enough to never visibly lag a minute rollover, without ever showing seconds
+
+  // ── Daily Disclaimer overlay ─────────────────────────────────────────
+  // Shown once per calendar day (ET, matching the trading day rather than
+  // the visitor's own timezone) until acknowledged. localStorage persists
+  // across tabs/sessions on this browser; a visitor on a new browser or
+  // with storage cleared sees it again, which is the correct fallback
+  // (better to over-show a disclaimer than under-show one).
+  const DISC_KEY = "mb_disclaimer_ack_date";
+  function todayET(){
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date()); // YYYY-MM-DD
+  }
+  function shouldShowDisclaimerToday(){
+    try { return localStorage.getItem(DISC_KEY) !== todayET(); }
+    catch(e){ return true; }   // storage unavailable (private mode, etc.) — safer to show it
+  }
+  function markDisclaimerAckToday(){
+    try { localStorage.setItem(DISC_KEY, todayET()); } catch(e){ /* non-fatal */ }
+  }
+
+  const discBackdrop = document.getElementById("disc-backdrop");
+  const discCheckbox  = document.getElementById("disc-checkbox");
+  const discAckBtn    = document.getElementById("disc-ack-btn");
+  discCheckbox.addEventListener("change", () => { discAckBtn.disabled = !discCheckbox.checked; });
+  discAckBtn.addEventListener("click", () => {
+    if (discAckBtn.disabled) return;
+    markDisclaimerAckToday();
+    discBackdrop.classList.remove("open");
+    maybeShowGuide();   // guide (new visitors only) runs right after the disclaimer clears
+  });
+  // Deliberately NO backdrop-click-to-close and NO close (✕) button here —
+  // acknowledging is the only way past this one, unlike every other modal
+  // on the page.
+
+  // ── First-visit Guide modal ──────────────────────────────────────────
+  // Shown once ever per browser, immediately after a NEW visitor clears
+  // the daily disclaimer above. GUIDE_KEY has a version suffix so a
+  // future rewrite of the guide can be re-surfaced to everyone by simply
+  // bumping it, without touching the disclaimer's own once-per-day logic.
+  const GUIDE_KEY = "mb_guide_seen_v1";
+  function shouldShowGuide(){
+    try { return !localStorage.getItem(GUIDE_KEY); }
+    catch(e){ return false; }   // storage unavailable — don't force the guide on every load
+  }
+  function markGuideSeen(){
+    try { localStorage.setItem(GUIDE_KEY, "1"); } catch(e){ /* non-fatal */ }
+  }
+
+  const guideBackdrop = document.getElementById("guide-backdrop");
+  const guideSteps = Array.from(document.querySelectorAll(".guide-step"));
+  const guideDots  = Array.from(document.querySelectorAll(".guide-dot"));
+  const guideNext  = document.getElementById("guide-next");
+  const guideSkip  = document.getElementById("guide-skip");
+  let guideStepN = 1;
+  function renderGuideStep(){
+    guideSteps.forEach(el => el.classList.toggle("active", Number(el.dataset.step) === guideStepN));
+    guideDots.forEach(el => el.classList.toggle("active", Number(el.dataset.dot) === guideStepN));
+    guideNext.textContent = guideStepN >= guideSteps.length ? "Got it" : "Next";
+  }
+  function closeGuide(){
+    guideBackdrop.classList.remove("open");
+    markGuideSeen();
+  }
+  guideNext.addEventListener("click", () => {
+    if (guideStepN >= guideSteps.length){ closeGuide(); return; }
+    guideStepN += 1;
+    renderGuideStep();
+  });
+  guideSkip.addEventListener("click", closeGuide);
+  function maybeShowGuide(){
+    if (!shouldShowGuide()) return;
+    guideStepN = 1;
+    renderGuideStep();
+    guideBackdrop.classList.add("open");
+  }
+
+  // Kick off the sequence on load: disclaimer first (if due today), then
+  // the guide (if this visitor has never seen it) once the disclaimer is
+  // cleared. If the disclaimer was already acknowledged today, the guide
+  // (for a brand-new visitor) runs immediately instead of waiting on it.
+  if (shouldShowDisclaimerToday()){
+    discBackdrop.classList.add("open");
+  } else {
+    maybeShowGuide();
+  }
 
   const STALE_MS = 5 * 60 * 1000;  // hide a row if it hasn't updated in 5 min, even if 'active' was never flipped
   const STATUS_STALE_MS = 25 * 1000;  // if the script hasn't confirmed "online" in 25s, treat it as offline
@@ -798,40 +1032,49 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
   });
-  // Two distinct alert tones: a clearer two-tone chime the first time a
-  // ticker appears today, and the original single tone for any repeat
-  // appearance of the same ticker (visit > 1) — so a first-time mover
-  // stands out from the crowd instead of sounding identical to a re-alert.
-  function playAlertBeepFirst(){
-    if (!audioCtx) return;
+  // Two distinct alert tones: an actual BELL sound (to match the site's
+  // name and logo) — a two-strike ring the first time a ticker appears
+  // today, and a single strike for any repeat appearance of the same
+  // ticker (visit > 1), so a first-time mover still stands out from a
+  // re-alert. Real bells aren't a pure tone — they ring with a cluster
+  // of non-integer-ratio overtones ("inharmonic partials") that each
+  // decay at a different rate, which is what makes a struck bell sound
+  // like a bell instead of a beep. ringBell() below approximates that
+  // with several detuned sine partials layered on one strike, each with
+  // its own short attack and exponential decay.
+  const BELL_PARTIALS = [
+    { ratio: 1.00, gain: 1.00, decayMul: 1.00 },
+    { ratio: 2.00, gain: 0.55, decayMul: 0.85 },
+    { ratio: 2.41, gain: 0.35, decayMul: 0.70 },
+    { ratio: 3.06, gain: 0.22, decayMul: 0.55 },
+    { ratio: 4.20, gain: 0.14, decayMul: 0.42 },
+    { ratio: 5.43, gain: 0.08, decayMul: 0.32 },
+  ];
+  function ringBell(startTime, baseFreq, volume, duration){
     const ctx = audioCtx;
-    const now = ctx.currentTime;
-    [880, 1320].forEach((freq, i) => {
+    BELL_PARTIALS.forEach(p => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "sine";
-      o.frequency.value = freq;
+      o.frequency.value = baseFreq * p.ratio;
       g.gain.value = 0.0001;
       o.connect(g); g.connect(ctx.destination);
-      const t0 = now + i * 0.13;
-      g.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
-      o.start(t0); o.stop(t0 + 0.24);
+      const peak = volume * p.gain;
+      const decay = duration * p.decayMul;
+      g.gain.exponentialRampToValueAtTime(peak, startTime + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, startTime + decay);
+      o.start(startTime); o.stop(startTime + decay + 0.05);
     });
+  }
+  function playAlertBeepFirst(){
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    ringBell(now, 660, 0.30, 1.10);          // first strike, lower
+    ringBell(now + 0.30, 880, 0.30, 1.00);   // second strike, higher — reads as "two rings"
   }
   function playAlertBeepRepeat(){
     if (!audioCtx) return;
-    const ctx = audioCtx;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = "sine";
-    o.frequency.value = 880;
-    g.gain.value = 0.0001;
-    o.connect(g); g.connect(ctx.destination);
-    const now = ctx.currentTime;
-    g.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
-    o.start(now); o.stop(now + 0.42);
+    ringBell(audioCtx.currentTime, 700, 0.28, 0.90);   // single strike
   }
 
   // ── News popup — one shared, fixed-position tooltip, click-driven so it
