@@ -143,11 +143,6 @@
   .disclaimer-modal .disc-footer{
     padding:16px 26px 22px; border-top:1px solid var(--line); flex:none;
   }
-  .disc-ack-row{
-    display:flex; align-items:flex-start; gap:9px; font-size:12px;
-    color:var(--text); margin-bottom:14px; cursor:pointer;
-  }
-  .disc-ack-row input[type=checkbox]{ margin-top:2px; flex:none; width:15px; height:15px; accent-color:var(--hot); cursor:pointer; }
 
   /* ── First-visit Guide modal ─────────────────────────────────────────
      Shown once ever (per browser) the first time a new visitor gets past
@@ -169,8 +164,11 @@
   .mock-row{
     display:grid; grid-template-columns:1fr 0.7fr 0.7fr; align-items:center;
     padding:9px 12px; border-bottom:1px solid var(--line); font-size:12.5px;
+    position:relative; overflow:hidden;
   }
   .mock-row:last-child{ border-bottom:none; }
+  .mock-row > *{ position:relative; z-index:1; }
+  .mock-bar{ position:absolute; left:0; top:0; bottom:0; z-index:0; }
   .mock-row .m-sym{ font-family:var(--mono); font-weight:700; color:#f2f3f4; }
   .mock-row .m-chg{ font-family:var(--mono); color:var(--hot); font-weight:600; }
   .mock-row .m-score{ font-family:var(--mono); font-weight:700; text-align:right; }
@@ -528,12 +526,8 @@
       <p>Full details: <a href="disclaimer.html" target="_blank" rel="noopener">Disclaimer &amp; Terms of Use</a> · <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a></p>
     </div>
     <div class="disc-footer">
-      <label class="disc-ack-row">
-        <input type="checkbox" id="disc-checkbox">
-        <span>I have read the above, I understand this is not investment advice, and I accept the full Disclaimer &amp; Terms of Use.</span>
-      </label>
       <div class="modal-actions">
-        <button class="btn btn-send" id="disc-ack-btn" type="button" disabled>I Understand &amp; Acknowledge</button>
+        <button class="btn btn-send" id="disc-ack-btn" type="button">I Understand &amp; Acknowledge</button>
       </div>
     </div>
   </div>
@@ -548,9 +542,18 @@
       <p class="hint">A quick guide to reading this page — three short steps.</p>
       <p style="font-size:13px; margin:0 0 4px;">Every row is a ticker currently matching our momentum criteria, ranked by a live <b>Momentum Bell Score</b>. Here's a hypothetical example of what you'll see:</p>
       <div class="mock-screenshot">
-        <div class="mock-row"><span class="m-sym">ABCD</span><span class="m-chg">+42.3%</span><span class="m-score hot">128</span></div>
-        <div class="mock-row"><span class="m-sym">WXYZ</span><span class="m-chg">+31.7%</span><span class="m-score warm">84</span></div>
-        <div class="mock-row"><span class="m-sym">QRST</span><span class="m-chg">+30.1%</span><span class="m-score cool">52</span></div>
+        <div class="mock-row">
+          <div class="mock-bar" style="width:100%; background:linear-gradient(90deg, var(--hot-dim), transparent);"></div>
+          <span class="m-sym">ABCD</span><span class="m-chg">+42.3%</span><span class="m-score hot">128</span>
+        </div>
+        <div class="mock-row">
+          <div class="mock-bar" style="width:84%; background:linear-gradient(90deg, var(--warn-dim), transparent);"></div>
+          <span class="m-sym">WXYZ</span><span class="m-chg">+31.7%</span><span class="m-score warm">84</span>
+        </div>
+        <div class="mock-row">
+          <div class="mock-bar" style="width:52%; background:linear-gradient(90deg, #1a1e23, transparent);"></div>
+          <span class="m-sym">QRST</span><span class="m-chg">+30.1%</span><span class="m-score cool">52</span>
+        </div>
       </div>
       <p class="hint">(These four tickers and figures are made up, purely to illustrate the three status colors below.)</p>
     </div>
@@ -660,11 +663,8 @@
   }
 
   const discBackdrop = document.getElementById("disc-backdrop");
-  const discCheckbox  = document.getElementById("disc-checkbox");
   const discAckBtn    = document.getElementById("disc-ack-btn");
-  discCheckbox.addEventListener("change", () => { discAckBtn.disabled = !discCheckbox.checked; });
   discAckBtn.addEventListener("click", () => {
-    if (discAckBtn.disabled) return;
     markDisclaimerAckToday();
     discBackdrop.classList.remove("open");
     maybeShowGuide();   // guide (new visitors only) runs right after the disclaimer clears
