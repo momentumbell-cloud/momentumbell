@@ -239,9 +239,6 @@
   }
   #copy-toast.show{ opacity:1; transform:translate(-50%, 0); }
   .modal-status.err{ color:#e5534b; }
-  .howto-list{ margin:0 0 14px; padding:0 0 0 18px; font-size:13px; line-height:1.65; color:var(--text); }
-  .howto-list li{ margin-bottom:8px; }
-  .howto-list b{ color:#f2f3f4; }
 
   main{ max-width:1020px; margin:0 auto; padding:6px 28px 60px; }
   .colhead{
@@ -479,26 +476,6 @@
   <div class="footer-note">Informational purposes only — not investment advice. <a href="disclaimer.html">Disclaimer &amp; Terms</a> · <a href="privacy.html">Privacy Policy</a></div>
 </footer>
 
-<!-- ── How to Use modal ──────────────────────────────────────────────── -->
-<div class="modal-backdrop" id="howto-backdrop">
-  <div class="modal">
-    <h3>How to use this page</h3>
-    <ul class="howto-list">
-      <li><b>Momentum Bell Score</b> — green = high attention right now, orange = building, gray = quiet.</li>
-      <li><b>Change%</b> — how much it's moved today, right now.</li>
-      <li><b>Max Change%</b> — the highest it moved today, even if it's cooled off since.</li>
-      <li><b>🗞 icon</b> — tap it to read the latest headlines on that ticker.</li>
-      <li>Tap a <b>symbol</b> to see its 1-minute chart.</li>
-      <li>Tap any column header (Change%, Price, Momentum Bell Score, Max Change) to sort by it.</li>
-      <li><b>Removed from watchlist</b>, below the table, shows tickers that no longer match the qualifying criteria — they're not gone by mistake, they simply stopped meeting the bar. Figure shown is the peak they reached while active.</li>
-    </ul>
-    <p class="hint">A live feed for spotting momentum — not investment advice. Always do your own research.</p>
-    <div class="modal-actions">
-      <button class="btn btn-send" id="howto-close" type="button">Got it</button>
-    </div>
-  </div>
-</div>
-
 <!-- ── Chart modal ───────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="chart-backdrop">
   <div class="modal chart-modal">
@@ -727,11 +704,20 @@
     renderGuideStep();
   });
   guideSkip.addEventListener("click", closeGuide);
-  function maybeShowGuide(){
-    if (!shouldShowGuide()) return;
+  // Manually reopening (via the How to Use button, any time) also allows
+  // closing by clicking outside it — the automatic first-visit path below
+  // still only offers Skip/Next/Got it, same as before, since walking a
+  // brand-new visitor through it deliberately doesn't invite a stray click
+  // to dismiss it early.
+  guideBackdrop.addEventListener("click", (e) => { if (e.target === guideBackdrop) closeGuide(); });
+  function openGuide(){
     guideStepN = 1;
     renderGuideStep();
     guideBackdrop.classList.add("open");
+  }
+  function maybeShowGuide(){
+    if (!shouldShowGuide()) return;
+    openGuide();
   }
 
   // Kick off the sequence on load: disclaimer first (if due today), then
@@ -856,10 +842,11 @@
       return;
     }
     criteriaList.innerHTML = `
-      <li>Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}</li>
+      <li>${c.max_price != null
+            ? `Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}`
+            : `Price at least $${Number(c.min_price).toFixed(2)} (no upper limit)`}</li>
       <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
-      <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>
-      <li>Momentum Bell Score at or above ${Number(c.min_attention_score).toFixed(0)}</li>`;
+      <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>`;
     if (dropLegend){
       const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
       dropLegend.textContent = graceMin != null
@@ -868,13 +855,14 @@
     }
   });
 
-  // ── How to Use modal ─────────────────────────────────────────────────────
+  // ── How to Use button ────────────────────────────────────────────────
+  // v0.131+: opens the SAME welcome guide a brand-new visitor sees
+  // automatically (see maybeShowGuide()/GUIDE_KEY below) — one guide,
+  // reachable both automatically (once, for new visitors) and on demand
+  // (any time, via this button), instead of two separate explainers that
+  // could drift out of sync with each other.
   const howtoBtn = document.getElementById("howto-btn");
-  const howtoBackdrop = document.getElementById("howto-backdrop");
-  const howtoClose = document.getElementById("howto-close");
-  howtoBtn.addEventListener("click", () => howtoBackdrop.classList.add("open"));
-  howtoClose.addEventListener("click", () => howtoBackdrop.classList.remove("open"));
-  howtoBackdrop.addEventListener("click", (e) => { if (e.target === howtoBackdrop) howtoBackdrop.classList.remove("open"); });
+  howtoBtn.addEventListener("click", () => openGuide());
 
   // ── Chart modal — TradingView's free embeddable widget (tv.js), loaded
   // only on first use. No API key, no signup, and it renders inside our
