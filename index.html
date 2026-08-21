@@ -274,7 +274,7 @@
   .row{
     display:grid; grid-template-columns:1.15fr 0.85fr 0.85fr 1.15fr 0.95fr 0.6fr;
     align-items:center; padding:14px; border-bottom:1px solid var(--line);
-    position:relative; overflow:hidden;
+    position:relative; overflow:hidden; cursor:pointer;
   }
   @keyframes flash-strong{
     0%{ background:rgba(46,160,67,0.16); }
@@ -291,6 +291,21 @@
     transition:width .35s ease, background .35s ease;
   }
   .row > *{ position:relative; z-index:1; }
+  /* "Copy" hover hint — the whole row copies the ticker on click now (see
+     the document click handler), not just the symbol text, so this tells
+     visitors that anywhere in the row works. Desktop-only (hover:hover
+     and pointer:fine both exclude touchscreens) since a hover hint has
+     no equivalent meaning on a device where nothing is ever "hovered"
+     without also being tapped. */
+  @media (hover:hover) and (pointer:fine){
+    .row:hover::after, .dropped-row:hover::after{
+      content:"Copy"; position:absolute; top:6px; right:8px; z-index:2;
+      background:var(--panel); border:1px solid var(--line); color:var(--dim);
+      font-size:10px; font-family:var(--sans); font-weight:600;
+      letter-spacing:.03em; padding:2px 8px; border-radius:20px;
+      pointer-events:none;
+    }
+  }
   .sym{ font-family:var(--mono); font-weight:700; font-size:15px; color:#f2f3f4; cursor:pointer; }
   .sym:hover{ text-decoration:underline; text-underline-offset:3px; }
   .visit{
@@ -339,6 +354,7 @@
     display:flex; align-items:center; gap:8px;
     padding:10px 16px;
     border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+    position:relative; cursor:pointer;
   }
   .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
   .dropped-row .maxchg{ font-size:13px; color:var(--text); font-family:var(--mono); font-weight:600; }
@@ -908,6 +924,15 @@
         allow_symbol_change: false,
         withdateranges: false,
         extended_hours_trading: true,
+        // extended_hours_trading above only makes pre/post-market data
+        // AVAILABLE to switch to — it doesn't change what's shown when
+        // the chart first opens. Most visitors here are trading pre/
+        // post-market, so the override below makes "Extended" the
+        // default session on open instead of "Regular" (they can still
+        // switch back via the session dropdown on the chart itself).
+        overrides: {
+          "mainSeriesProperties.sessionId": "extended"
+        },
         container_id: "tv_chart_container"
       });
     } catch(e){
@@ -949,10 +974,10 @@
 
   document.addEventListener("click", (e) => {
     if (e.target.closest(".news-wrap")) return;   // news icon handles its own click
-    const symEl = e.target.closest(".cell-sym");
-    if (symEl && symEl.dataset.sym){
-      copySymbol(symEl.dataset.sym);
-      openChart(symEl.dataset.sym);
+    const rowEl = e.target.closest(".row, .dropped-row");
+    if (rowEl && rowEl.dataset.sym){
+      copySymbol(rowEl.dataset.sym);
+      openChart(rowEl.dataset.sym);
     }
   });
 
@@ -1230,6 +1255,7 @@
       if (!el){
         el = document.createElement("div");
         el.className = "row";
+        el.dataset.sym = d.sym;
         rowsEl.appendChild(el);
         rowEls[d.sym] = el;
         if (cls === "hot") el.classList.add("flash-strong");
@@ -1302,7 +1328,7 @@
     droppedRowsEl.innerHTML = dropped.map(d => {
       const maxChgVal = d.max_chg ?? d.chg ?? 0;
       const sign = maxChgVal >= 0 ? "+" : "";
-      return `<div class="dropped-row">
+      return `<div class="dropped-row" data-sym="${escapeHtml(d.sym)}">
                 <span class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${escapeHtml(d.sym)}</span>
                 <span class="maxchg">${sign}${maxChgVal.toFixed(1)}%</span>
               </div>`;
