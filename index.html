@@ -24,6 +24,23 @@
 
 <title>Momentum Bell — Live Watchlist</title>
 <link rel="icon" type="image/png" href="favicon.png">
+
+<!-- Open Graph / Twitter Card — so links shared on X/social show a real
+     preview instead of a bare URL -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Momentum Bell — Live Watchlist">
+<meta property="og:description" content="A free, live-updating feed of stocks grabbing trader attention right now — filtered by price, % change, and volume, refreshed instantly.">
+<meta property="og:image" content="https://momentumbell.com/logo.png">
+<meta property="og:url" content="https://momentumbell.com/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Momentum Bell — Live Watchlist">
+<meta name="twitter:description" content="A free, live-updating feed of stocks grabbing trader attention right now.">
+<meta name="twitter:image" content="https://momentumbell.com/logo.png">
+
+<!-- PWA — lets a visitor "Add to Home Screen" and open it like an app -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0c0e">
+<link rel="apple-touch-icon" href="logo.png">
 <style>
   :root{
     --bg: #0a0c0e;
@@ -59,11 +76,33 @@
     color:#f2f3f4;
   }
   .brand .sub{ font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .session-badge{
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:10.5px; font-weight:700; letter-spacing:.03em;
+    margin-top:6px; padding:3px 9px; border-radius:20px;
+    background:var(--panel); border:1px solid var(--line); color:var(--dim);
+  }
+  .session-badge .sb-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .session-badge.premarket{ color:var(--warn); border-color:var(--warn-dim); }
+  .session-badge.regular{ color:var(--hot); border-color:var(--hot-dim); }
+  .session-badge.afterhours{ color:var(--warn); border-color:var(--warn-dim); }
+  .session-badge.closed{ color:var(--dim); }
   .hdr-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .live-wrap{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
   .live{
     display:flex; align-items:center; gap:7px; font-size:11.5px;
     color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
   }
+  .updated-ago{ font-size:10px; color:var(--dim); font-family:var(--mono); }
+  .search-wrap{ max-width:1020px; margin:0 auto; padding:0 28px 12px; }
+  .ticker-search{
+    width:100%; background:var(--panel); border:1px solid var(--line);
+    color:var(--text); font-family:var(--sans); font-size:13px;
+    padding:10px 14px; border-radius:10px; outline:none;
+    transition:border-color .15s ease;
+  }
+  .ticker-search::placeholder{ color:var(--dim); }
+  .ticker-search:focus{ border-color:var(--hot-dim); }
   .dot{
     width:7px; height:7px; border-radius:50%; background:var(--hot);
     box-shadow:0 0 0 0 rgba(46,160,67,.6);
@@ -312,6 +351,14 @@
     font-family:var(--mono); font-size:10px; color:var(--dim);
     margin-left:8px; padding:1px 6px; border:1px solid var(--line); border-radius:20px;
   }
+  .visit.new-badge{ color:var(--hot); border-color:var(--hot-dim); font-weight:700; }
+  .star-icon{
+    display:inline-block; font-size:15px; color:var(--dim);
+    margin-right:8px; cursor:pointer; line-height:1; vertical-align:-1px;
+    transition:color .15s ease, transform .1s ease;
+  }
+  .star-icon:hover{ color:var(--warn); transform:scale(1.15); }
+  .star-icon.starred{ color:var(--warn); }
   .score{ font-family:var(--mono); font-size:15px; font-weight:700; }
   .score.hot{ color:var(--hot); }
   .score.warm{ color:var(--warn); }
@@ -339,6 +386,19 @@
     font-size:13.5px; line-height:1.6;
   }
   .empty b{ color:var(--text); }
+  .empty .empty-sub{ font-size:12px; margin-top:6px; display:block; }
+
+  .skeleton{ display:block; }
+  .skel-row{
+    height:64px; margin:0; border-bottom:1px solid var(--line);
+    background:linear-gradient(90deg, var(--panel) 25%, #171b1f 37%, var(--panel) 63%);
+    background-size:400% 100%;
+    animation:skel-shimmer 1.4s ease infinite;
+  }
+  @keyframes skel-shimmer{
+    0%{ background-position:100% 50%; }
+    100%{ background-position:0% 50%; }
+  }
 
   .sound-wrap{ position:relative; display:inline-flex; align-items:center; gap:4px; }
 
@@ -421,6 +481,7 @@
     <div>
       <h1>Momentum Bell</h1>
       <div class="sub">Fast &amp; Simple</div>
+      <div class="session-badge" id="session-badge">—</div>
     </div>
   </div>
   <div class="hdr-right">
@@ -434,11 +495,17 @@
         <div class="legend-row" style="align-items:flex-start; margin-top:6px;">🔔 Single tone — a repeat appearance of the same ticker.</div>
       </div>
     </div>
-    <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
+    <div class="live-wrap">
+      <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
+      <div class="updated-ago" id="updated-ago"></div>
+    </div>
   </div>
 </header>
 
 <main>
+  <div class="search-wrap">
+    <input type="text" id="ticker-search" class="ticker-search" placeholder="🔍 Filter by symbol…" autocomplete="off" spellcheck="false">
+  </div>
   <div class="colhead">
     <div>Symbol</div>
     <div class="sortable" data-key="chg">Change% <span class="sort-arrow" data-key="chg"></span></div>
@@ -455,10 +522,17 @@
     <div class="sortable" data-key="maxchg">Max Change <span class="sort-arrow" data-key="maxchg"></span></div>
     <div>News</div>
   </div>
+  <div class="skeleton" id="skeleton">
+    <div class="skel-row"></div>
+    <div class="skel-row"></div>
+    <div class="skel-row"></div>
+    <div class="skel-row"></div>
+  </div>
   <div class="rows" id="rows"></div>
   <div class="empty" id="empty" style="display:none;">
-    No active movers right now.<br>
+    <span id="empty-main">No active movers right now.</span><br>
     <b>Momentum Bell</b> updates the instant a ticker qualifies — leave this open.
+    <span class="empty-sub" id="empty-sub"></span>
   </div>
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
@@ -655,6 +729,44 @@
   }
   updateETClock();
   setInterval(updateETClock, 15000);   // recomputed often enough to never visibly lag a minute rollover, without ever showing seconds
+
+  // ── Market session badge ─────────────────────────────────────────────
+  // Standard US equity session windows in ET. Deliberately does NOT
+  // account for market holidays (Thanksgiving, etc.) — those are only a
+  // handful of days a year and would need a maintained holiday calendar
+  // to get right; "closed" on an ordinary weekday afternoon because it's
+  // actually a holiday is a rare, low-cost mistake compared to the
+  // complexity of tracking it, so this sticks to day-of-week + time-of-
+  // day only.
+  const sessionBadgeEl = document.getElementById("session-badge");
+  function getMarketSession(){
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", hour: "numeric", minute: "numeric",
+      hour12: false, weekday: "short"
+    }).formatToParts(new Date());
+    const get = t => parts.find(p => p.type === t)?.value || "";
+    const day = get("weekday");
+    const mins = Number(get("hour")) * 60 + Number(get("minute"));
+    if (day === "Sat" || day === "Sun") return "closed";
+    if (mins >= 4*60   && mins < 9*60+30)  return "premarket";
+    if (mins >= 9*60+30 && mins < 16*60)   return "regular";
+    if (mins >= 16*60  && mins < 20*60)    return "afterhours";
+    return "closed";
+  }
+  function updateSessionBadge(){
+    if (!sessionBadgeEl) return;
+    const session = getMarketSession();
+    const labels = {
+      premarket:  "Premarket",
+      regular:    "Regular Hours",
+      afterhours: "After Hours",
+      closed:     "Market Closed",
+    };
+    sessionBadgeEl.className = "session-badge " + session;
+    sessionBadgeEl.innerHTML = `<span class="sb-dot"></span>${labels[session]}`;
+  }
+  updateSessionBadge();
+  setInterval(updateSessionBadge, 15000);
 
   // ── Daily Disclaimer overlay ─────────────────────────────────────────
   // Shown once per calendar day (ET, matching the trading day rather than
@@ -972,8 +1084,34 @@
     document.body.removeChild(ta);
   }
 
+  // ── Favorites / starred tickers (persisted across visits) ───────────────
+  const STARRED_KEY_STORAGE = "mb_starred";
+  function loadStarred(){
+    try {
+      const raw = JSON.parse(localStorage.getItem(STARRED_KEY_STORAGE) || "[]");
+      return new Set(Array.isArray(raw) ? raw : []);
+    } catch(e){ return new Set(); }
+  }
+  function saveStarred(){
+    try { localStorage.setItem(STARRED_KEY_STORAGE, JSON.stringify([...starredSyms])); }
+    catch(e){ /* non-fatal */ }
+  }
+  const starredSyms = loadStarred();
+  function isStarred(sym){ return starredSyms.has(sym); }
+  function toggleStar(sym){
+    if (starredSyms.has(sym)) starredSyms.delete(sym);
+    else starredSyms.add(sym);
+    saveStarred();
+    render(lastData);
+  }
+
   document.addEventListener("click", (e) => {
     if (e.target.closest(".news-wrap")) return;   // news icon handles its own click
+    const starEl = e.target.closest(".star-icon");
+    if (starEl && starEl.dataset.starSym){
+      toggleStar(starEl.dataset.starSym);
+      return;   // don't also copy/open-chart for the same click
+    }
     const rowEl = e.target.closest(".row, .dropped-row");
     if (rowEl && rowEl.dataset.sym){
       copySymbol(rowEl.dataset.sym);
@@ -1046,20 +1184,50 @@
     }
   });
 
-  // ── Sound alert on new ticker ────────────────────────────────────────────
-  let soundOn = false;
+  // ── Sound alert on new ticker (preference persisted across visits) ──────
+  const SOUND_KEY_STORAGE = "mb_sound_on";
+  function loadSoundPref(){
+    try { return localStorage.getItem(SOUND_KEY_STORAGE) === "1"; }
+    catch(e){ return false; }
+  }
+  function saveSoundPref(){
+    try { localStorage.setItem(SOUND_KEY_STORAGE, soundOn ? "1" : "0"); }
+    catch(e){ /* non-fatal */ }
+  }
+  let soundOn = loadSoundPref();
   let audioCtx = null;
   let knownSyms = null;   // null = haven't rendered yet, so the first batch never triggers a sound
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
   const soundLabel = document.getElementById("sound-label");
-  soundBtn.addEventListener("click", () => {
-    soundOn = !soundOn;
+  function applySoundUI(){
     soundBtn.classList.toggle("on", soundOn);
-    soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
+    if (soundOn) soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
     soundBtn.setAttribute("aria-pressed", String(soundOn));
     soundIcon.textContent = soundOn ? "🔊" : "🔇";
     soundLabel.textContent = soundOn ? "Sound: On" : "Sound: Off";
+  }
+  applySoundUI();   // reflect the remembered preference immediately on load
+  // Browsers block audio playback without a user gesture, even if the
+  // preference says "on" from a previous visit — so a remembered "on"
+  // preference creates the AudioContext (in its browser-default
+  // suspended state) and this one-time listener resumes it the moment
+  // the visitor interacts with the page at all, rather than waiting for
+  // them to specifically click the sound button again.
+  if (soundOn){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const resumeOnce = () => {
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      document.removeEventListener("click", resumeOnce);
+      document.removeEventListener("keydown", resumeOnce);
+    };
+    document.addEventListener("click", resumeOnce);
+    document.addEventListener("keydown", resumeOnce);
+  }
+  soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    applySoundUI();
+    saveSoundPref();
     if (soundOn && !audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
@@ -1161,9 +1329,29 @@
   window.addEventListener("scroll", () => { closeNewsTip(); closeAllLegends(); }, true);
   window.addEventListener("resize", () => { closeNewsTip(); closeAllLegends(); });
 
-  // ── Sorting ───────────────────────────────────────────────────────────────
-  let sortKey = "score";
-  let sortDir = "desc";
+  // ── Sorting (persisted across visits) ───────────────────────────────────
+  const SORT_KEY_STORAGE = "mb_sort_key";
+  const SORT_DIR_STORAGE = "mb_sort_dir";
+  const VALID_SORT_KEYS = ["score", "price", "chg", "maxchg"];
+  function loadSortPref(){
+    try {
+      const k = localStorage.getItem(SORT_KEY_STORAGE);
+      const d = localStorage.getItem(SORT_DIR_STORAGE);
+      return {
+        key: VALID_SORT_KEYS.includes(k) ? k : "score",
+        dir: (d === "asc" || d === "desc") ? d : "desc",
+      };
+    } catch(e){ return { key: "score", dir: "desc" }; }
+  }
+  function saveSortPref(){
+    try {
+      localStorage.setItem(SORT_KEY_STORAGE, sortKey);
+      localStorage.setItem(SORT_DIR_STORAGE, sortDir);
+    } catch(e){ /* non-fatal */ }
+  }
+  const initialSort = loadSortPref();
+  let sortKey = initialSort.key;
+  let sortDir = initialSort.dir;
   function sortValue(d, key){
     if (key === "score")  return d._score;
     if (key === "price")  return d.price != null ? d.price : -Infinity;
@@ -1184,10 +1372,21 @@
       if (key === sortKey) sortDir = sortDir === "desc" ? "asc" : "desc";
       else { sortKey = key; sortDir = "desc"; }
       updateSortIndicators();
+      saveSortPref();
       render(lastData);
     });
   });
   updateSortIndicators();
+
+  // ── Ticker search / filter ───────────────────────────────────────────
+  let searchQuery = "";
+  const tickerSearchEl = document.getElementById("ticker-search");
+  if (tickerSearchEl){
+    tickerSearchEl.addEventListener("input", () => {
+      searchQuery = tickerSearchEl.value.trim().toUpperCase();
+      render(lastData);
+    });
+  }
 
   // The Attention Score shown on every row is computed server-side and
   // pushed already-final — this page just displays it as-is. Deliberate:
@@ -1213,9 +1412,11 @@
   }
 
   let lastData = null;
+  const skeletonEl = document.getElementById("skeleton");
 
   function render(data){
     lastData = data;
+    if (skeletonEl) skeletonEl.style.display = "none";   // first real data arrived — skeleton's job is done
     // Only close the news tip if the ticker it's showing has genuinely
     // gone away — NOT on every refresh. Rows get fully rebuilt below on
     // every live update (ticks arrive constantly), so naively closing it
@@ -1228,9 +1429,22 @@
     const entries = Object.values(data || {})
       .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS)
       .map(d => ({ ...d, _score: attentionScore(d) }))
-      .sort((a, b) => sortDir === "desc"
-        ? sortValue(b, sortKey) - sortValue(a, sortKey)
-        : sortValue(a, sortKey) - sortValue(b, sortKey));
+      .sort((a, b) => {
+        const aStar = isStarred(a.sym), bStar = isStarred(b.sym);
+        if (aStar !== bStar) return aStar ? -1 : 1;   // starred always floats to the top, ahead of the normal sort
+        return sortDir === "desc"
+          ? sortValue(b, sortKey) - sortValue(a, sortKey)
+          : sortValue(a, sortKey) - sortValue(b, sortKey);
+      });
+
+    // Search filtering happens AFTER sound/new-ticker tracking below is
+    // computed from the FULL entries list — filtering the visible rows
+    // must never affect which tickers count as "already seen", or
+    // clearing the search box would wrongly replay sounds for tickers
+    // that were never actually new.
+    const displayEntries = searchQuery
+      ? entries.filter(d => d.sym.includes(searchQuery))
+      : entries;
 
     const currentSyms = new Set(entries.map(d => d.sym));
     if (knownSyms !== null && soundOn){
@@ -1244,11 +1458,11 @@
     knownSyms = currentSyms;
 
     newsBySym = {};
-    entries.forEach(d => { newsBySym[d.sym] = Array.isArray(d.news) ? d.news : []; });
+    displayEntries.forEach(d => { newsBySym[d.sym] = Array.isArray(d.news) ? d.news : []; });
 
     const seen = new Set();
 
-    entries.forEach(d => {
+    displayEntries.forEach(d => {
       seen.add(d.sym);
       let el = rowEls[d.sym];
       const cls = scoreClass(d._score);
@@ -1277,9 +1491,23 @@
       const newsIcon = news.length
         ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
         : "";
+      const starOn = isStarred(d.sym);
+      const starIcon = `<span class="star-icon${starOn ? " starred" : ""}" data-star-sym="${escapeHtml(d.sym)}" title="${starOn ? "Remove from favorites" : "Add to favorites"}">${starOn ? "★" : "☆"}</span>`;
+      const visitBadge = d.visit > 1
+        ? `<span class="visit">${ordinal(d.visit)} time</span>`
+        : `<span class="visit new-badge">NEW</span>`;
+      // Per-row tooltip: only Change%/Max Change% and the score are ever
+      // published per-ticker (see index.html's payload notes near
+      // _web_build_payload on the app side) — never raw volume, so this
+      // sticks to what's actually available rather than fabricating a
+      // number. Native title attribute — simplest option, works
+      // everywhere, no extra positioning logic needed.
+      el.title = `${d.sym}: up ${chgSign}${(d.chg ?? 0).toFixed(1)}% today `
+                + `(peak ${maxChgSign}${maxChgVal.toFixed(1)}%) — matches the site's live criteria. `
+                + `Click anywhere in this row to copy the symbol and open its chart.`;
       el.innerHTML = `
         <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
-        <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${escapeHtml(d.sym)}${d.visit > 1 ? `<span class="visit">${ordinal(d.visit)} time</span>` : ""}<span class="news-inline">${newsIcon}</span></div>
+        <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${starIcon}${escapeHtml(d.sym)}${visitBadge}<span class="news-inline">${newsIcon}</span></div>
         <div class="cell-chg"><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
         <div class="cell-price"><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
         <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
@@ -1296,7 +1524,7 @@
     });
 
     // keep DOM order matching sorted order
-    entries.forEach(d => rowsEl.appendChild(rowEls[d.sym]));
+    displayEntries.forEach(d => rowsEl.appendChild(rowEls[d.sym]));
 
     // The row that owns any currently-open news tip was just rebuilt from
     // scratch (innerHTML above) — its old .news-wrap element is gone, so
@@ -1315,14 +1543,39 @@
       }
     }
 
-    emptyEl.style.display = entries.length ? "none" : "block";
+    emptyEl.style.display = displayEntries.length ? "none" : "block";
+    if (!displayEntries.length) updateEmptyMessage();
     renderDropped(data);
   }
 
+  const emptyMainEl = document.getElementById("empty-main");
+  const emptySubEl  = document.getElementById("empty-sub");
+  function updateEmptyMessage(){
+    if (!emptyMainEl || !emptySubEl) return;
+    if (searchQuery){
+      emptyMainEl.textContent = `No tickers matching "${searchQuery}".`;
+      emptySubEl.textContent = " Clear the search to see the full live list.";
+      return;
+    }
+    const session = getMarketSession();
+    if (session === "closed"){
+      const isWeekend = ["Sat","Sun"].includes(
+        new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", weekday:"short" }).format(new Date()));
+      emptyMainEl.textContent = "💤 Markets are closed right now.";
+      emptySubEl.textContent = isWeekend
+        ? " Check back Monday at 4:00 AM ET when premarket opens."
+        : " Back at 4:00 AM ET for premarket.";
+    } else {
+      emptyMainEl.textContent = "No active movers right now.";
+      emptySubEl.textContent = "";
+    }
+  }
+
   function renderDropped(data){
-    const dropped = Object.values(data || {})
+    let dropped = Object.values(data || {})
       .filter(d => d && d.active === false && d.reason === "dropped")
       .sort((a, b) => (b.max_chg ?? b.chg ?? 0) - (a.max_chg ?? a.chg ?? 0));
+    if (searchQuery) dropped = dropped.filter(d => d.sym.includes(searchQuery));
 
     droppedSection.style.display = dropped.length ? "block" : "none";
     droppedRowsEl.innerHTML = dropped.map(d => {
@@ -1340,7 +1593,21 @@
     return n + (s[(v-20)%10] || s[v] || s[0]);
   }
 
+  // ── "Last updated" indicator ─────────────────────────────────────────
+  let lastUpdateTs = null;
+  const updatedAgoEl = document.getElementById("updated-ago");
+  function tickUpdatedAgo(){
+    if (!updatedAgoEl || lastUpdateTs === null) return;
+    const secs = Math.max(0, Math.round((Date.now() - lastUpdateTs) / 1000));
+    if (secs < 2) updatedAgoEl.textContent = "Updated just now";
+    else if (secs < 60) updatedAgoEl.textContent = `Updated ${secs}s ago`;
+    else updatedAgoEl.textContent = `Updated ${Math.round(secs/60)}m ago`;
+  }
+  setInterval(tickUpdatedAgo, 1000);
+
   ref.on("value", snap => {
+    lastUpdateTs = Date.now();
+    tickUpdatedAgo();
     render(snap.val());
   }, err => {
     console.error(err);
