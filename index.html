@@ -79,7 +79,7 @@
   .session-badge{
     display:inline-flex; align-items:center; gap:5px;
     font-size:10.5px; font-weight:700; letter-spacing:.03em;
-    margin-top:6px; padding:3px 9px; border-radius:20px;
+    padding:3px 9px; border-radius:20px;
     background:var(--panel); border:1px solid var(--line); color:var(--dim);
   }
   .session-badge .sb-dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
@@ -88,12 +88,11 @@
   .session-badge.afterhours{ color:var(--warn); border-color:var(--warn-dim); }
   .session-badge.closed{ color:var(--dim); }
   .hdr-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .live-wrap{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; }
+  .live-wrap{ display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
   .live{
     display:flex; align-items:center; gap:7px; font-size:11.5px;
     color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
   }
-  .updated-ago{ font-size:10px; color:var(--dim); font-family:var(--mono); }
   .search-wrap{ max-width:1020px; margin:0 auto; padding:0 28px 12px; }
   .ticker-search{
     width:100%; background:var(--panel); border:1px solid var(--line);
@@ -161,19 +160,6 @@
   }
   .modal h3{ margin:0 0 4px; font-size:15px; color:#f2f3f4; }
   .modal p.hint{ margin:0 0 14px; font-size:11.5px; color:var(--dim); }
-  .chart-modal{ max-width:700px; }
-  .chart-modal-hdr{
-    display:flex; align-items:center; justify-content:space-between;
-    margin-bottom:12px;
-  }
-  .chart-modal-hdr h3{ margin:0; font-size:17px; font-family:var(--mono); }
-  .chart-close-btn{
-    background:none; border:none; color:var(--dim); font-size:20px;
-    cursor:pointer; line-height:1; padding:2px 6px;
-  }
-  .chart-close-btn:hover{ color:var(--text); }
-  #tv_chart_container{ width:100%; height:420px; background:var(--bg); border-radius:8px; overflow:hidden; }
-  .chart-modal p.hint{ margin:10px 0 0; }
 
   /* ── Daily Disclaimer overlay ─────────────────────────────────────────
      Shown once per calendar day (per browser) on first visit — see
@@ -338,7 +324,7 @@
      without also being tapped. */
   @media (hover:hover) and (pointer:fine){
     .row:hover::after, .dropped-row:hover::after{
-      content:"Copy"; position:absolute; top:6px; right:8px; z-index:2;
+      content:"Copy ticker"; position:absolute; top:6px; right:8px; z-index:2;
       background:var(--panel); border:1px solid var(--line); color:var(--dim);
       font-size:10px; font-family:var(--sans); font-weight:600;
       letter-spacing:.03em; padding:2px 8px; border-radius:20px;
@@ -481,7 +467,6 @@
     <div>
       <h1>Momentum Bell</h1>
       <div class="sub">Fast &amp; Simple</div>
-      <div class="session-badge" id="session-badge">—</div>
     </div>
   </div>
   <div class="hdr-right">
@@ -497,7 +482,7 @@
     </div>
     <div class="live-wrap">
       <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
-      <div class="updated-ago" id="updated-ago"></div>
+      <div class="session-badge" id="session-badge">—</div>
     </div>
   </div>
 </header>
@@ -565,18 +550,6 @@
   </div>
   <div class="footer-note">Informational purposes only — not investment advice. <a href="disclaimer.html">Disclaimer &amp; Terms</a> · <a href="privacy.html">Privacy Policy</a></div>
 </footer>
-
-<!-- ── Chart modal ───────────────────────────────────────────────────── -->
-<div class="modal-backdrop" id="chart-backdrop">
-  <div class="modal chart-modal">
-    <div class="chart-modal-hdr">
-      <h3 id="chart-modal-title">—</h3>
-      <button class="chart-close-btn" id="chart-close" type="button">✕</button>
-    </div>
-    <div id="tv_chart_container"></div>
-    <p class="hint">1-minute chart — a true seconds-level feed isn't available from any free source.</p>
-  </div>
-</div>
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="fb-backdrop">
@@ -652,7 +625,7 @@
         <li><span class="guide-sw" style="background:var(--warn)"></span> <b>Amber — 70 to 100.</b> Building attention; worth watching, not yet as heated as green.</li>
         <li><span class="guide-sw" style="background:var(--dim)"></span> <b>Gray/Neutral — below 70.</b> Quiet for now; it qualified for the list but isn't drawing heavy attention yet.</li>
       </ul>
-      <p style="font-size:13px; margin:0;">Tap any ticker symbol to pull up its 1-minute chart, and the 🗞 icon for its latest headlines.</p>
+      <p style="font-size:13px; margin:0;">Tap anywhere on a row to copy that ticker symbol, and the 🗞 icon for its latest headlines.</p>
     </div>
 
     <div class="guide-step" data-step="3">
@@ -992,71 +965,6 @@
   const howtoBtn = document.getElementById("howto-btn");
   howtoBtn.addEventListener("click", () => openGuide());
 
-  // ── Chart modal — TradingView's free embeddable widget (tv.js), loaded
-  // only on first use. No API key, no signup, and it renders inside our
-  // own page (an in-page widget, not a redirect to tradingview.com). Free
-  // embedding tops out at 1-minute bars — true seconds-level charts are a
-  // paid TradingView feature with no free equivalent anywhere.
-  const chartBackdrop = document.getElementById("chart-backdrop");
-  const chartTitle = document.getElementById("chart-modal-title");
-  const chartClose = document.getElementById("chart-close");
-  const chartContainer = document.getElementById("tv_chart_container");
-  let tvScriptPromise = null;
-  function loadTVScript(){
-    if (!tvScriptPromise){
-      tvScriptPromise = new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = "https://s3.tradingview.com/tv.js";
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-    return tvScriptPromise;
-  }
-  async function openChart(sym){
-    closeNewsTip();
-    closeAllLegends();
-    chartTitle.textContent = sym;
-    chartBackdrop.classList.add("open");
-    chartContainer.innerHTML = "";
-    try{
-      await loadTVScript();
-      new TradingView.widget({
-        autosize: true,
-        symbol: sym,
-        interval: "1",
-        timezone: "America/New_York",
-        theme: "dark",
-        style: "1",
-        locale: "en",
-        toolbar_bg: "#0a0c0e",
-        enable_publishing: false,
-        hide_side_toolbar: true,
-        allow_symbol_change: false,
-        withdateranges: false,
-        extended_hours_trading: true,
-        // extended_hours_trading above only makes pre/post-market data
-        // AVAILABLE to switch to — it doesn't change what's shown when
-        // the chart first opens. Most visitors here are trading pre/
-        // post-market, so the override below makes "Extended" the
-        // default session on open instead of "Regular" (they can still
-        // switch back via the session dropdown on the chart itself).
-        overrides: {
-          "mainSeriesProperties.sessionId": "extended"
-        },
-        container_id: "tv_chart_container"
-      });
-    } catch(e){
-      chartContainer.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px;padding:20px;text-align:center;'>Chart couldn't load — check your connection and try again.</div>";
-    }
-  }
-  function closeChart(){
-    chartBackdrop.classList.remove("open");
-    chartContainer.innerHTML = "";   // stop the widget rather than leave it running hidden
-  }
-  chartClose.addEventListener("click", closeChart);
-  chartBackdrop.addEventListener("click", (e) => { if (e.target === chartBackdrop) closeChart(); });
   // ── Copy ticker to clipboard ──────────────────────────────────────────
   const copyToast = document.getElementById("copy-toast");
   let copyToastTimer = null;
@@ -1110,12 +1018,11 @@
     const starEl = e.target.closest(".star-icon");
     if (starEl && starEl.dataset.starSym){
       toggleStar(starEl.dataset.starSym);
-      return;   // don't also copy/open-chart for the same click
+      return;   // don't also copy for the same click
     }
     const rowEl = e.target.closest(".row, .dropped-row");
     if (rowEl && rowEl.dataset.sym){
       copySymbol(rowEl.dataset.sym);
-      openChart(rowEl.dataset.sym);
     }
   });
 
@@ -1504,7 +1411,7 @@
       // everywhere, no extra positioning logic needed.
       el.title = `${d.sym}: up ${chgSign}${(d.chg ?? 0).toFixed(1)}% today `
                 + `(peak ${maxChgSign}${maxChgVal.toFixed(1)}%) — matches the site's live criteria. `
-                + `Click anywhere in this row to copy the symbol and open its chart.`;
+                + `Click anywhere in this row to copy the symbol.`;
       el.innerHTML = `
         <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
         <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${starIcon}${escapeHtml(d.sym)}${visitBadge}<span class="news-inline">${newsIcon}</span></div>
@@ -1593,21 +1500,7 @@
     return n + (s[(v-20)%10] || s[v] || s[0]);
   }
 
-  // ── "Last updated" indicator ─────────────────────────────────────────
-  let lastUpdateTs = null;
-  const updatedAgoEl = document.getElementById("updated-ago");
-  function tickUpdatedAgo(){
-    if (!updatedAgoEl || lastUpdateTs === null) return;
-    const secs = Math.max(0, Math.round((Date.now() - lastUpdateTs) / 1000));
-    if (secs < 2) updatedAgoEl.textContent = "Updated just now";
-    else if (secs < 60) updatedAgoEl.textContent = `Updated ${secs}s ago`;
-    else updatedAgoEl.textContent = `Updated ${Math.round(secs/60)}m ago`;
-  }
-  setInterval(tickUpdatedAgo, 1000);
-
   ref.on("value", snap => {
-    lastUpdateTs = Date.now();
-    tickUpdatedAgo();
     render(snap.val());
   }, err => {
     console.error(err);
