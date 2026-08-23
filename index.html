@@ -94,6 +94,25 @@
     color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
   }
   .search-wrap{ max-width:1020px; margin:0 auto; padding:0 28px 12px; }
+  .channel-tabs{
+    max-width:1020px; margin:0 auto; padding:14px 28px 10px;
+    display:flex; gap:8px;
+  }
+  .channel-tab{
+    background:var(--panel); border:1px solid var(--line); color:var(--dim);
+    font-family:var(--sans); font-size:12.5px; font-weight:600;
+    padding:8px 16px; border-radius:20px; cursor:pointer;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .channel-tab:hover{ color:var(--text); }
+  .channel-tab.active{
+    background:var(--hot-dim); border-color:var(--hot); color:var(--hot);
+  }
+  .maintenance-banner{
+    background:var(--warn-dim); border-bottom:1px solid var(--warn);
+    color:var(--warn); font-size:12.5px; font-weight:600;
+    text-align:center; padding:10px 20px; line-height:1.5;
+  }
   .ticker-search{
     width:100%; background:var(--panel); border:1px solid var(--line);
     color:var(--text); font-family:var(--sans); font-size:13px;
@@ -349,6 +368,23 @@
   .score.hot{ color:var(--hot); }
   .score.warm{ color:var(--warn); }
   .score.cool{ color:var(--dim); }
+  .score.extreme{
+    color:#ff6a1a; text-shadow:0 0 8px rgba(255,106,26,.65);
+    letter-spacing:.01em;
+  }
+  /* Extreme-hot (score > 500) — a row this hot doesn't just flash once,
+     it stays visibly "on fire" for as long as the score holds above 500:
+     a pulsing orange/red glow around the row and an animated flame-toned
+     bar (see barColor's "extreme" branch), on top of the same flash
+     animation every hot row gets when it updates. */
+  @keyframes extreme-pulse{
+    0%, 100%{ box-shadow:inset 0 0 0 1px rgba(255,106,26,.35), 0 0 14px rgba(255,61,26,.25); }
+    50%{ box-shadow:inset 0 0 0 1px rgba(255,149,0,.7), 0 0 22px rgba(255,61,26,.55); }
+  }
+  .row.extreme-hot{
+    animation:extreme-pulse 1.6s ease-in-out infinite;
+    background:rgba(255,61,26,0.04);
+  }
   .price{ font-family:var(--mono); font-size:14px; color:var(--text); }
   .chg{ font-family:var(--mono); font-size:14px; font-weight:600; }
   .chg.pos{ color:var(--hot); }
@@ -419,16 +455,22 @@
 
   /* Small ET clock, tucked in a corner so it never competes with the
      watchlist itself for attention — hours:minutes only, no seconds
-     (a ticking number is far more distracting than a static one). */
-  .et-clock{
+     (a ticking number is far more distracting than a static one). The
+     session badge sits directly above it in the same corner stack. */
+  .et-clock-wrap{
     position:fixed; bottom:10px; right:12px; z-index:50;
+    display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+  }
+  .et-clock-wrap .session-badge{ opacity:.9; }
+  .et-clock{
     font-family:var(--mono); font-size:12px; letter-spacing:.02em;
     color:var(--dim); opacity:.65; pointer-events:none;
     background:rgba(10,12,14,.55); padding:3px 8px; border-radius:5px;
     border:1px solid var(--line);
   }
   @media (max-width: 720px){
-    .et-clock{ font-size:11px; bottom:7px; right:7px; padding:3px 7px; }
+    .et-clock-wrap{ bottom:7px; right:7px; gap:4px; }
+    .et-clock{ font-size:11px; padding:3px 7px; }
   }
   @media (max-width: 720px){
     .colhead{ display:none; }
@@ -459,7 +501,10 @@
 
 <div id="copy-toast"></div>
 
-<div class="et-clock" id="et-clock" title="Current time — US market (Eastern)">--:-- ET</div>
+<div class="et-clock-wrap">
+  <div class="session-badge" id="session-badge">—</div>
+  <div class="et-clock" id="et-clock" title="Current time — US market (Eastern)">--:-- ET</div>
+</div>
 
 <header>
   <div class="brand">
@@ -482,14 +527,19 @@
     </div>
     <div class="live-wrap">
       <div class="live"><span class="dot" id="live-dot"></span><span id="live-label">CONNECTING</span></div>
-      <div class="session-badge" id="session-badge">—</div>
     </div>
   </div>
 </header>
 
+<div class="maintenance-banner" id="maintenance-banner" style="display:none;"></div>
+
 <main>
+  <div class="channel-tabs" id="channel-tabs">
+    <button class="channel-tab" data-channel="normal" type="button">🌐 All Movers</button>
+    <button class="channel-tab" data-channel="focused" type="button">🎯 Focused</button>
+  </div>
   <div class="search-wrap">
-    <input type="text" id="ticker-search" class="ticker-search" placeholder="🔍 Filter by symbol…" autocomplete="off" spellcheck="false">
+    <input type="text" id="ticker-search" class="ticker-search" placeholder="🔍 Find symbol…" autocomplete="off" spellcheck="false">
   </div>
   <div class="colhead">
     <div>Symbol</div>
@@ -674,9 +724,12 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref("live/watchlist");
+  const refFocused = db.ref("live/watchlist_focused");
   const criteriaRef = db.ref("live/criteria");
+  const criteriaRefFocused = db.ref("live/criteria_focused");
   const statusRef = db.ref("live/status");
   const connectedRef = db.ref(".info/connected");
+  const maintenanceRef = db.ref("live/maintenance");
 
   const rowsEl = document.getElementById("rows");
   const emptyEl = document.getElementById("empty");
@@ -934,8 +987,24 @@
     }
   });
 
-  criteriaRef.on("value", snap => {
-    const c = snap.val();
+  // ── Feed channels: "All Movers" (normal) vs "Focused" ────────────────
+  // Two entirely separate live feeds published by the app — visitors
+  // pick between them here. Both stay subscribed at all times (cheap for
+  // a feed this size) so switching tabs is instant, using whichever data
+  // has already arrived, rather than waiting on a fresh Firebase read.
+  const CHANNEL_KEY_STORAGE = "mb_channel";
+  function loadChannelPref(){
+    try { return localStorage.getItem(CHANNEL_KEY_STORAGE) === "focused" ? "focused" : "normal"; }
+    catch(e){ return "normal"; }
+  }
+  function saveChannelPref(){
+    try { localStorage.setItem(CHANNEL_KEY_STORAGE, activeChannel); } catch(e){ /* non-fatal */ }
+  }
+  let activeChannel = loadChannelPref();
+  let lastDataNormal = null, lastDataFocused = null;
+  let lastCriteriaNormal = null, lastCriteriaFocused = null;
+
+  function renderCriteria(c){
     const dropLegend = document.getElementById("drop-criteria-legend");
     if (!c){
       criteriaList.innerHTML = "<li>Criteria not published yet.</li>";
@@ -953,6 +1022,51 @@
       dropLegend.textContent = graceMin != null
         ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand. This is expected behavior, not an error.`
         : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand. This is expected behavior, not an error.";
+    }
+  }
+
+  const channelTabsEl = document.getElementById("channel-tabs");
+  function updateChannelTabsUI(){
+    if (!channelTabsEl) return;
+    channelTabsEl.querySelectorAll(".channel-tab").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.channel === activeChannel);
+    });
+  }
+  function switchChannel(ch){
+    if (ch === activeChannel) return;
+    activeChannel = ch;
+    saveChannelPref();
+    updateChannelTabsUI();
+    render(activeChannel === "focused" ? lastDataFocused : lastDataNormal);
+    renderCriteria(activeChannel === "focused" ? lastCriteriaFocused : lastCriteriaNormal);
+  }
+  if (channelTabsEl){
+    channelTabsEl.querySelectorAll(".channel-tab").forEach(btn => {
+      btn.addEventListener("click", () => switchChannel(btn.dataset.channel));
+    });
+  }
+  updateChannelTabsUI();
+
+  criteriaRef.on("value", snap => {
+    lastCriteriaNormal = snap.val();
+    if (activeChannel === "normal") renderCriteria(lastCriteriaNormal);
+  });
+  criteriaRefFocused.on("value", snap => {
+    lastCriteriaFocused = snap.val();
+    if (activeChannel === "focused") renderCriteria(lastCriteriaFocused);
+  });
+
+  // ── Maintenance Mode banner ──────────────────────────────────────────
+  const maintenanceBannerEl = document.getElementById("maintenance-banner");
+  maintenanceRef.on("value", snap => {
+    const m = snap.val();
+    if (!maintenanceBannerEl) return;
+    if (m && m.active){
+      maintenanceBannerEl.textContent = m.message
+        || "🔧 We're making some updates right now — the live feed may be temporarily paused or show outdated data.";
+      maintenanceBannerEl.style.display = "block";
+    } else {
+      maintenanceBannerEl.style.display = "none";
     }
   });
 
@@ -1303,11 +1417,13 @@
     return d.score || 0;
   }
   function scoreClass(score){
+    if (score > 500) return "extreme";
     if (score > 100) return "hot";
     if (score >= 70) return "warm";
     return "cool";
   }
   function barColor(cls){
+    if (cls === "extreme") return "linear-gradient(90deg, #ff3d1a, #ff9500, transparent)";
     if (cls === "hot")  return "linear-gradient(90deg, var(--hot-dim), transparent)";
     if (cls === "warm") return "linear-gradient(90deg, var(--warn-dim), transparent)";
     return "linear-gradient(90deg, #1a1e23, transparent)";
@@ -1379,16 +1495,21 @@
         el.dataset.sym = d.sym;
         rowsEl.appendChild(el);
         rowEls[d.sym] = el;
-        if (cls === "hot") el.classList.add("flash-strong");
+        if (cls === "extreme" || cls === "hot") el.classList.add("flash-strong");
         else if (cls === "warm") el.classList.add("flash-weak");
       } else {
-        // re-trigger the flash animation on update — only for warm/hot tiers;
-        // neutral tickers just update quietly with no flash
+        // re-trigger the flash animation on update — only for warm/hot/
+        // extreme tiers; neutral tickers just update quietly with no flash
         el.classList.remove("flash-strong", "flash-weak");
         void el.offsetWidth;
-        if (cls === "hot") el.classList.add("flash-strong");
+        if (cls === "extreme" || cls === "hot") el.classList.add("flash-strong");
         else if (cls === "warm") el.classList.add("flash-weak");
       }
+      // Extreme-hot (score > 500) is a PERSISTENT visual state, not just a
+      // brief flash — the whole row keeps its fire treatment (glow, flame
+      // icon) for as long as the score stays above 500, updated every
+      // render rather than only at the moment it first crosses the line.
+      el.classList.toggle("extreme-hot", cls === "extreme");
       const pct = Math.max(0, Math.min(100, d._score));
       const chgSign = (d.chg || 0) >= 0 ? "+" : "";
       const chgClass = (d.chg || 0) >= 0 ? "pos" : "neg";
@@ -1417,7 +1538,7 @@
         <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${starIcon}${escapeHtml(d.sym)}${visitBadge}<span class="news-inline">${newsIcon}</span></div>
         <div class="cell-chg"><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
         <div class="cell-price"><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
-        <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${d._score.toFixed(0)}</span></div>
+        <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${cls === "extreme" ? "🔥 " : ""}${d._score.toFixed(0)}${cls === "extreme" ? " 🔥" : ""}</span></div>
         <div class="cell-maxchg"><span class="lbl">Max Change</span><span class="maxchg">${maxChgSign}${maxChgVal.toFixed(1)}%</span></div>
         <div class="cell-news news-cell">${newsIcon}</div>`;
     });
@@ -1501,7 +1622,14 @@
   }
 
   ref.on("value", snap => {
-    render(snap.val());
+    lastDataNormal = snap.val();
+    if (activeChannel === "normal") render(lastDataNormal);
+  }, err => {
+    console.error(err);
+  });
+  refFocused.on("value", snap => {
+    lastDataFocused = snap.val();
+    if (activeChannel === "focused") render(lastDataFocused);
   }, err => {
     console.error(err);
   });
