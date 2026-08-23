@@ -94,20 +94,48 @@
     color:var(--dim); font-family:var(--mono); letter-spacing:0.03em;
   }
   .search-wrap{ max-width:1020px; margin:0 auto; padding:0 28px 12px; }
+  .channel-tabs-outer{ max-width:1020px; margin:0 auto; padding:14px 28px 6px; }
   .channel-tabs{
-    max-width:1020px; margin:0 auto; padding:14px 28px 10px;
-    display:flex; gap:8px;
+    position:relative; display:inline-flex; gap:2px;
+    background:var(--panel); border:1px solid var(--line); border-radius:24px;
+    padding:4px;
   }
+  .channel-tabs-highlight{
+    position:absolute; top:4px; bottom:4px; left:4px; width:0;
+    background:var(--hot-dim); border-radius:20px;
+    transition:left .25s cubic-bezier(.4,0,.2,1), width .25s cubic-bezier(.4,0,.2,1);
+    z-index:0;
+  }
+  .channel-tab-wrap{ position:relative; }
   .channel-tab{
-    background:var(--panel); border:1px solid var(--line); color:var(--dim);
-    font-family:var(--sans); font-size:12.5px; font-weight:600;
-    padding:8px 16px; border-radius:20px; cursor:pointer;
-    transition:background .15s ease, color .15s ease, border-color .15s ease;
+    position:relative; z-index:1; background:transparent; border:none;
+    color:var(--dim); font-family:var(--sans); font-size:12.5px; font-weight:600;
+    padding:8px 18px; border-radius:20px; cursor:pointer;
+    transition:color .15s ease;
   }
   .channel-tab:hover{ color:var(--text); }
-  .channel-tab.active{
-    background:var(--hot-dim); border-color:var(--hot); color:var(--hot);
+  .channel-tab.active{ color:var(--hot); }
+  .tab-tooltip{
+    display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:20;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:10px 12px; width:230px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+    font-size:11.5px; line-height:1.7; color:var(--text); cursor:default;
   }
+  .tab-tooltip .tt-note{ color:var(--dim); font-size:10.5px; margin-bottom:6px; display:block; }
+  .tab-tooltip ul{ margin:0; padding:0; list-style:none; }
+  .tab-tooltip li{ display:flex; gap:6px; }
+  .tab-tooltip li::before{ content:"—"; color:var(--dim); flex:none; }
+  .channel-tab-wrap:hover .tab-tooltip{ display:block; }
+  /* First-time-user hint — a couple of gentle pulses on page load so a
+     new visitor's eye is drawn to the fact these two options exist and
+     are selectable, same "notice me" pattern already used for the sound
+     toggle (see .sound-hint) — stops after the first tap on either tab. */
+  @keyframes channelTabsHint{
+    0%, 100%{ box-shadow:0 0 0 0 rgba(46,160,67,0); }
+    50%{ box-shadow:0 0 0 6px rgba(46,160,67,.16); border-color:var(--hot); }
+  }
+  .channel-tabs.tabs-hint{ animation:channelTabsHint 1.5s ease-in-out 3; }
   .maintenance-banner{
     background:var(--warn-dim); border-bottom:1px solid var(--warn);
     color:var(--warn); font-size:12.5px; font-weight:600;
@@ -142,6 +170,16 @@
   }
   .pill-btn:hover{ border-color:#333a42; color:var(--text); }
   .pill-btn.on{ color:var(--hot); border-color:var(--hot-dim); }
+  .install-btn{ display:none; }   /* mobile-only — see the 720px media query below */
+  @media (max-width: 720px){
+    .install-btn{ display:flex; }
+  }
+  #install-steps{ margin:0 0 14px; }
+  #install-steps ol{ margin:0; padding-left:20px; font-size:13px; line-height:1.75; color:var(--text); }
+  #install-steps li{ margin-bottom:6px; }
+  #install-steps .install-note{
+    margin-top:10px; font-size:11.5px; color:var(--dim); line-height:1.6;
+  }
   @keyframes soundHint{
     0%, 100%{ box-shadow:0 0 0 0 rgba(227,179,65,0); border-color:var(--line); color:var(--dim); }
     50%{ box-shadow:0 0 0 6px rgba(227,179,65,.16); border-color:var(--warn); color:var(--warn); }
@@ -153,18 +191,23 @@
   .criteria-panel{
     display:none; position:absolute; bottom:36px; top:auto; right:0; z-index:40;
     background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:14px 16px; width:270px;
+    padding:14px 16px; width:300px;
     box-shadow:0 12px 32px rgba(0,0,0,.5);
     font-size:12.5px; line-height:1.85; color:var(--text);
   }
   .criteria-panel.open{ display:block; }
   .criteria-panel h3{
-    margin:0 0 8px; font-size:11px; text-transform:uppercase;
+    margin:0 0 10px; font-size:11px; text-transform:uppercase;
     letter-spacing:.06em; color:var(--dim); font-weight:600;
   }
   .criteria-panel ul{ margin:0; padding:0; list-style:none; }
   .criteria-panel li{ display:flex; gap:8px; }
   .criteria-panel li::before{ content:"—"; color:var(--dim); flex:none; }
+  .criteria-section{ margin-bottom:12px; }
+  .criteria-section:last-child{ margin-bottom:0; }
+  .criteria-section h4{
+    margin:0 0 4px; font-size:11.5px; font-weight:700; color:#f2f3f4;
+  }
 
   /* Feedback modal */
   .modal-backdrop{
@@ -534,12 +577,21 @@
 <div class="maintenance-banner" id="maintenance-banner" style="display:none;"></div>
 
 <main>
-  <div class="channel-tabs" id="channel-tabs">
-    <button class="channel-tab" data-channel="normal" type="button">🌐 All Movers</button>
-    <button class="channel-tab" data-channel="focused" type="button">🎯 Focused</button>
+  <div class="channel-tabs-outer">
+    <div class="channel-tabs" id="channel-tabs">
+      <div class="channel-tabs-highlight" id="channel-tabs-highlight"></div>
+      <div class="channel-tab-wrap">
+        <button class="channel-tab active" data-channel="normal" type="button">All Movers</button>
+        <div class="tab-tooltip" id="tab-tooltip-normal">Loading current criteria…</div>
+      </div>
+      <div class="channel-tab-wrap">
+        <button class="channel-tab" data-channel="focused" type="button">Focused</button>
+        <div class="tab-tooltip" id="tab-tooltip-focused">Loading current criteria…</div>
+      </div>
+    </div>
   </div>
   <div class="search-wrap">
-    <input type="text" id="ticker-search" class="ticker-search" placeholder="🔍 Find symbol…" autocomplete="off" spellcheck="false">
+    <input type="text" id="ticker-search" class="ticker-search" placeholder="🔍 Search today's list…" autocomplete="off" spellcheck="false">
   </div>
   <div class="colhead">
     <div>Symbol</div>
@@ -590,16 +642,42 @@
       <button class="pill-btn" id="criteria-btn" type="button">ℹ️ Criteria</button>
       <div class="criteria-panel" id="criteria-panel">
         <h3>How tickers qualify</h3>
-        <ul id="criteria-list">
-          <li>Loading current criteria…</li>
-        </ul>
+        <div class="criteria-section">
+          <h4>🌐 All Movers</h4>
+          <ul id="criteria-list-normal">
+            <li>Loading current criteria…</li>
+          </ul>
+        </div>
+        <div class="criteria-section">
+          <h4>🎯 Focused</h4>
+          <ul id="criteria-list-focused">
+            <li>Loading current criteria…</li>
+          </ul>
+        </div>
       </div>
     </div>
+    <button class="pill-btn install-btn" id="install-btn" type="button">📲 Install App</button>
     <button class="pill-btn" id="howto-btn" type="button">❓ How to Use</button>
     <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
   </div>
   <div class="footer-note">Informational purposes only — not investment advice. <a href="disclaimer.html">Disclaimer &amp; Terms</a> · <a href="privacy.html">Privacy Policy</a></div>
 </footer>
+
+<!-- ── Install App guide modal ──────────────────────────────────────────
+     Shown when the browser has no native "Add to Home Screen" prompt to
+     trigger directly (iOS Safari never exposes one; some Android
+     browsers don't either) — walks the visitor through the manual steps
+     for whichever platform they're actually on. -->
+<div class="modal-backdrop" id="install-backdrop">
+  <div class="modal">
+    <h3 id="install-modal-title">📲 Install Momentum Bell</h3>
+    <p class="hint">Adds a shortcut to your home screen that opens like an app — no app store needed.</p>
+    <div id="install-steps"></div>
+    <div class="modal-actions">
+      <button class="btn btn-send" id="install-close" type="button">Got it</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="fb-backdrop">
@@ -927,7 +1005,8 @@
   // ── Criteria panel ───────────────────────────────────────────────────────
   const criteriaBtn = document.getElementById("criteria-btn");
   const criteriaPanel = document.getElementById("criteria-panel");
-  const criteriaList = document.getElementById("criteria-list");
+  const criteriaListNormal = document.getElementById("criteria-list-normal");
+  const criteriaListFocused = document.getElementById("criteria-list-focused");
   criteriaBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     criteriaPanel.classList.toggle("open");
@@ -1004,56 +1083,106 @@
   let lastDataNormal = null, lastDataFocused = null;
   let lastCriteriaNormal = null, lastCriteriaFocused = null;
 
-  function renderCriteria(c){
-    const dropLegend = document.getElementById("drop-criteria-legend");
+  function renderCriteriaList(listEl, c){
+    if (!listEl) return;
     if (!c){
-      criteriaList.innerHTML = "<li>Criteria not published yet.</li>";
-      if (dropLegend) dropLegend.textContent = "Removal criteria not published yet.";
+      listEl.innerHTML = "<li>Loading current criteria…</li>";
       return;
     }
-    criteriaList.innerHTML = `
+    listEl.innerHTML = `
       <li>${c.max_price != null
             ? `Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}`
             : `Price at least $${Number(c.min_price).toFixed(2)} (no upper limit)`}</li>
       <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
       <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>`;
-    if (dropLegend){
-      const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
-      dropLegend.textContent = graceMin != null
-        ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand. This is expected behavior, not an error.`
-        : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand. This is expected behavior, not an error.";
+  }
+  function updateDropLegend(c){
+    const dropLegend = document.getElementById("drop-criteria-legend");
+    if (!dropLegend) return;
+    if (!c){
+      dropLegend.textContent = "Removal criteria not published yet.";
+      return;
     }
+    const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
+    dropLegend.textContent = graceMin != null
+      ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand. This is expected behavior, not an error.`
+      : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand. This is expected behavior, not an error.";
+  }
+  // Tab hover tooltips — same criteria data as the Criteria panel, but
+  // right on the tab itself so a visitor can see what each one means
+  // without opening a separate panel. Focused gets one extra sentence
+  // explaining it's the stricter, more selective option, since that
+  // distinction isn't obvious from the tab label alone.
+  function renderTabTooltip(el, c, isFocused){
+    if (!el) return;
+    if (!c){
+      el.innerHTML = "Loading current criteria…";
+      return;
+    }
+    const note = isFocused
+      ? `<span class="tt-note">More selective — tighter, stricter criteria for higher-conviction movers:</span>`
+      : "";
+    el.innerHTML = note + `
+      <ul>
+        <li>${c.max_price != null
+              ? `Price between $${Number(c.min_price).toFixed(2)} and $${Number(c.max_price).toFixed(2)}`
+              : `Price at least $${Number(c.min_price).toFixed(2)} (no upper limit)`}</li>
+        <li>Up at least ${Number(c.min_chg_pct).toFixed(0)}% today</li>
+        <li>At least $${Number(c.min_usd_vol).toLocaleString()} in volume</li>
+      </ul>`;
   }
 
   const channelTabsEl = document.getElementById("channel-tabs");
+  const channelHighlightEl = document.getElementById("channel-tabs-highlight");
   function updateChannelTabsUI(){
     if (!channelTabsEl) return;
     channelTabsEl.querySelectorAll(".channel-tab").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.channel === activeChannel);
     });
+    const activeBtn = channelTabsEl.querySelector(`.channel-tab[data-channel="${activeChannel}"]`);
+    if (activeBtn && channelHighlightEl){
+      const tabsRect = channelTabsEl.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      channelHighlightEl.style.left = (btnRect.left - tabsRect.left) + "px";
+      channelHighlightEl.style.width = btnRect.width + "px";
+    }
   }
   function switchChannel(ch){
+    channelTabsEl.classList.remove("tabs-hint");   // any interaction clears the "notice me" pulse for good
     if (ch === activeChannel) return;
     activeChannel = ch;
     saveChannelPref();
     updateChannelTabsUI();
     render(activeChannel === "focused" ? lastDataFocused : lastDataNormal);
-    renderCriteria(activeChannel === "focused" ? lastCriteriaFocused : lastCriteriaNormal);
+    // The Criteria info panel always shows BOTH channels at once (see
+    // renderCriteriaList calls below) — only the Dropped section's own
+    // explanatory legend actually needs to track the active tab, since
+    // the Dropped list itself only ever shows the active channel's drops.
+    updateDropLegend(activeChannel === "focused" ? lastCriteriaFocused : lastCriteriaNormal);
   }
   if (channelTabsEl){
     channelTabsEl.querySelectorAll(".channel-tab").forEach(btn => {
       btn.addEventListener("click", () => switchChannel(btn.dataset.channel));
     });
+    // Pulse a couple of times on load to catch a first-time visitor's
+    // eye — same treatment the sound toggle already gets.
+    channelTabsEl.classList.add("tabs-hint");
+    window.addEventListener("load", updateChannelTabsUI);   // widths can shift slightly right after fonts finish loading
   }
   updateChannelTabsUI();
+  window.addEventListener("resize", updateChannelTabsUI);   // tab widths can change at different viewport sizes
 
   criteriaRef.on("value", snap => {
     lastCriteriaNormal = snap.val();
-    if (activeChannel === "normal") renderCriteria(lastCriteriaNormal);
+    renderCriteriaList(criteriaListNormal, lastCriteriaNormal);
+    renderTabTooltip(document.getElementById("tab-tooltip-normal"), lastCriteriaNormal, false);
+    if (activeChannel === "normal") updateDropLegend(lastCriteriaNormal);
   });
   criteriaRefFocused.on("value", snap => {
     lastCriteriaFocused = snap.val();
-    if (activeChannel === "focused") renderCriteria(lastCriteriaFocused);
+    renderCriteriaList(criteriaListFocused, lastCriteriaFocused);
+    renderTabTooltip(document.getElementById("tab-tooltip-focused"), lastCriteriaFocused, true);
+    if (activeChannel === "focused") updateDropLegend(lastCriteriaFocused);
   });
 
   // ── Maintenance Mode banner ──────────────────────────────────────────
@@ -1069,6 +1198,74 @@
       maintenanceBannerEl.style.display = "none";
     }
   });
+
+  // ── Install App (Add to Home Screen) ─────────────────────────────────
+  // Two very different paths depending on the browser:
+  // - Android Chrome/Edge fire a "beforeinstallprompt" event or expose no
+  //   native prompt at all; when captured, tapping the button triggers
+  //   the OS's own install dialog directly — one tap, no instructions
+  //   needed.
+  // - iOS Safari (and any other browser without that event) has NO
+  //   programmatic install API at all — the only way is the manual
+  //   Share-sheet steps, so this shows those instead.
+  let deferredInstallPrompt = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+  });
+
+  const installBtn = document.getElementById("install-btn");
+  const installBackdrop = document.getElementById("install-backdrop");
+  const installSteps = document.getElementById("install-steps");
+  const installClose = document.getElementById("install-close");
+
+  function isRunningInstalled(){
+    return window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;   // iOS's own flag
+  }
+  function isIOS(){
+    return /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS 13+ reports as a Mac
+  }
+
+  if (installBtn){
+    if (isRunningInstalled()){
+      // Already installed and running as an app — nothing useful this
+      // button could do, so it doesn't even show (mobile-only to begin
+      // with, per the CSS media query).
+      installBtn.style.display = "none";
+    }
+    installBtn.addEventListener("click", async () => {
+      if (deferredInstallPrompt){
+        deferredInstallPrompt.prompt();
+        await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        return;
+      }
+      // No native prompt available — show manual steps for the actual
+      // platform instead of a one-size-fits-all guess.
+      if (isIOS()){
+        installSteps.innerHTML = `
+          <ol>
+            <li>Tap the <b>Share</b> button (the square with an arrow pointing up) in Safari's toolbar.</li>
+            <li>Scroll down and tap <b>"Add to Home Screen."</b></li>
+            <li>Tap <b>"Add"</b> in the top-right corner.</li>
+          </ol>
+          <div class="install-note">Momentum Bell will then open full-screen from your home screen, just like a regular app — no App Store needed.</div>`;
+      } else {
+        installSteps.innerHTML = `
+          <ol>
+            <li>Tap the <b>⋮</b> (menu) button in your browser.</li>
+            <li>Tap <b>"Add to Home Screen"</b> or <b>"Install app."</b></li>
+            <li>Confirm to add it.</li>
+          </ol>
+          <div class="install-note">Momentum Bell will then open full-screen from your home screen, just like a regular app — no app store needed.</div>`;
+      }
+      installBackdrop.classList.add("open");
+    });
+  }
+  if (installClose) installClose.addEventListener("click", () => installBackdrop.classList.remove("open"));
+  if (installBackdrop) installBackdrop.addEventListener("click", (e) => { if (e.target === installBackdrop) installBackdrop.classList.remove("open"); });
 
   // ── How to Use button ────────────────────────────────────────────────
   // v0.131+: opens the SAME welcome guide a brand-new visitor sees
