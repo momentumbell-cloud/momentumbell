@@ -170,16 +170,6 @@
   }
   .pill-btn:hover{ border-color:#333a42; color:var(--text); }
   .pill-btn.on{ color:var(--hot); border-color:var(--hot-dim); }
-  .install-btn{ display:none; }   /* mobile-only — see the 720px media query below */
-  @media (max-width: 720px){
-    .install-btn{ display:flex; }
-  }
-  #install-steps{ margin:0 0 14px; }
-  #install-steps ol{ margin:0; padding-left:20px; font-size:13px; line-height:1.75; color:var(--text); }
-  #install-steps li{ margin-bottom:6px; }
-  #install-steps .install-note{
-    margin-top:10px; font-size:11.5px; color:var(--dim); line-height:1.6;
-  }
   @keyframes soundHint{
     0%, 100%{ box-shadow:0 0 0 0 rgba(227,179,65,0); border-color:var(--line); color:var(--dim); }
     50%{ box-shadow:0 0 0 6px rgba(227,179,65,.16); border-color:var(--warn); color:var(--warn); }
@@ -656,28 +646,11 @@
         </div>
       </div>
     </div>
-    <button class="pill-btn install-btn" id="install-btn" type="button">📲 Install App</button>
     <button class="pill-btn" id="howto-btn" type="button">❓ How to Use</button>
     <button class="pill-btn" id="feedback-btn" type="button">💬 Feedback</button>
   </div>
   <div class="footer-note">Informational purposes only — not investment advice. <a href="disclaimer.html">Disclaimer &amp; Terms</a> · <a href="privacy.html">Privacy Policy</a></div>
 </footer>
-
-<!-- ── Install App guide modal ──────────────────────────────────────────
-     Shown when the browser has no native "Add to Home Screen" prompt to
-     trigger directly (iOS Safari never exposes one; some Android
-     browsers don't either) — walks the visitor through the manual steps
-     for whichever platform they're actually on. -->
-<div class="modal-backdrop" id="install-backdrop">
-  <div class="modal">
-    <h3 id="install-modal-title">📲 Install Momentum Bell</h3>
-    <p class="hint">Adds a shortcut to your home screen that opens like an app — no app store needed.</p>
-    <div id="install-steps"></div>
-    <div class="modal-actions">
-      <button class="btn btn-send" id="install-close" type="button">Got it</button>
-    </div>
-  </div>
-</div>
 
 <!-- ── Feedback modal ─────────────────────────────────────────────────── -->
 <div class="modal-backdrop" id="fb-backdrop">
@@ -1199,74 +1172,6 @@
     }
   });
 
-  // ── Install App (Add to Home Screen) ─────────────────────────────────
-  // Two very different paths depending on the browser:
-  // - Android Chrome/Edge fire a "beforeinstallprompt" event or expose no
-  //   native prompt at all; when captured, tapping the button triggers
-  //   the OS's own install dialog directly — one tap, no instructions
-  //   needed.
-  // - iOS Safari (and any other browser without that event) has NO
-  //   programmatic install API at all — the only way is the manual
-  //   Share-sheet steps, so this shows those instead.
-  let deferredInstallPrompt = null;
-  window.addEventListener("beforeinstallprompt", (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-  });
-
-  const installBtn = document.getElementById("install-btn");
-  const installBackdrop = document.getElementById("install-backdrop");
-  const installSteps = document.getElementById("install-steps");
-  const installClose = document.getElementById("install-close");
-
-  function isRunningInstalled(){
-    return window.matchMedia("(display-mode: standalone)").matches
-        || window.navigator.standalone === true;   // iOS's own flag
-  }
-  function isIOS(){
-    return /iPad|iPhone|iPod/.test(navigator.userAgent)
-        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS 13+ reports as a Mac
-  }
-
-  if (installBtn){
-    if (isRunningInstalled()){
-      // Already installed and running as an app — nothing useful this
-      // button could do, so it doesn't even show (mobile-only to begin
-      // with, per the CSS media query).
-      installBtn.style.display = "none";
-    }
-    installBtn.addEventListener("click", async () => {
-      if (deferredInstallPrompt){
-        deferredInstallPrompt.prompt();
-        await deferredInstallPrompt.userChoice;
-        deferredInstallPrompt = null;
-        return;
-      }
-      // No native prompt available — show manual steps for the actual
-      // platform instead of a one-size-fits-all guess.
-      if (isIOS()){
-        installSteps.innerHTML = `
-          <ol>
-            <li>Tap the <b>Share</b> button (the square with an arrow pointing up) in Safari's toolbar.</li>
-            <li>Scroll down and tap <b>"Add to Home Screen."</b></li>
-            <li>Tap <b>"Add"</b> in the top-right corner.</li>
-          </ol>
-          <div class="install-note">Momentum Bell will then open full-screen from your home screen, just like a regular app — no App Store needed.</div>`;
-      } else {
-        installSteps.innerHTML = `
-          <ol>
-            <li>Tap the <b>⋮</b> (menu) button in your browser.</li>
-            <li>Tap <b>"Add to Home Screen"</b> or <b>"Install app."</b></li>
-            <li>Confirm to add it.</li>
-          </ol>
-          <div class="install-note">Momentum Bell will then open full-screen from your home screen, just like a regular app — no app store needed.</div>`;
-      }
-      installBackdrop.classList.add("open");
-    });
-  }
-  if (installClose) installClose.addEventListener("click", () => installBackdrop.classList.remove("open"));
-  if (installBackdrop) installBackdrop.addEventListener("click", (e) => { if (e.target === installBackdrop) installBackdrop.classList.remove("open"); });
-
   // ── How to Use button ────────────────────────────────────────────────
   // v0.131+: opens the SAME welcome guide a brand-new visitor sees
   // automatically (see maybeShowGuide()/GUIDE_KEY below) — one guide,
@@ -1414,7 +1319,8 @@
   }
   let soundOn = loadSoundPref();
   let audioCtx = null;
-  let knownSyms = null;   // null = haven't rendered yet, so the first batch never triggers a sound
+  let knownSymsNormal = null;   // null = haven't rendered this channel yet, so its first batch never triggers a sound
+  let knownSymsFocused = null;  // same, but tracked independently for the Focused feed — see the fix note in render()
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
   const soundLabel = document.getElementById("sound-label");
@@ -1484,13 +1390,30 @@
       o.start(startTime); o.stop(startTime + decay + 0.05);
     });
   }
+  // Recreates audioCtx if it's ever in a "closed" state — browsers can
+  // close a backgrounded tab's AudioContext to reclaim resources after
+  // it's sat idle for a while, which is normal, expected behavior (see
+  // the try/catch note above where sound alerts are triggered). Without
+  // this, sound would just permanently stop working after that happens;
+  // with it, the very next alert quietly gets a fresh, working context
+  // instead.
+  function ensureAudioCtx(){
+    if (!audioCtx || audioCtx.state === "closed"){
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { console.warn("Could not create AudioContext:", e); }
+    } else if (audioCtx.state === "suspended"){
+      audioCtx.resume().catch(() => {});   // fire-and-forget — scheduling still works even before this resolves
+    }
+  }
   function playAlertBeepFirst(){
+    ensureAudioCtx();
     if (!audioCtx) return;
     const now = audioCtx.currentTime;
     ringBell(now, 660, 0.30, 1.10);          // first strike, lower
     ringBell(now + 0.30, 880, 0.30, 1.00);   // second strike, higher — reads as "two rings"
   }
   function playAlertBeepRepeat(){
+    ensureAudioCtx();
     if (!audioCtx) return;
     ringBell(audioCtx.currentTime, 700, 0.28, 0.90);   // single strike
   }
@@ -1657,7 +1580,47 @@
           : sortValue(a, sortKey) - sortValue(b, sortKey);
       });
 
-    // Search filtering happens AFTER sound/new-ticker tracking below is
+    const currentSyms = new Set(entries.map(d => d.sym));
+    // v0.136+ FIX: knownSyms used to be ONE shared variable for both
+    // feeds. Since render() is called for whichever channel is currently
+    // active, switching tabs handed it a totally different ticker list
+    // than what it last compared against — every ticker in the
+    // newly-active feed looked "new" simultaneously, bursting a sound
+    // for the entire list at once. Tracking each channel's "already
+    // seen" set separately fixes that; a channel's own tracker only
+    // ever gets compared against that SAME channel's own previous data.
+    const knownSymsForChannel = activeChannel === "focused" ? knownSymsFocused : knownSymsNormal;
+    // v0.137+ FIX — the REAL, long-standing cause of "keeps bursting
+    // continuous sound alerts until I close and reopen": browsers can
+    // put an AudioContext into a "closed" state to reclaim resources
+    // after a tab sits backgrounded for a while (this is normal,
+    // expected browser behavior, not a bug in ringBell itself). Calling
+    // ctx.createOscillator() on a closed context throws — and that
+    // exception, thrown from INSIDE this forEach, used to abort the
+    // whole loop AND skip the "knownSyms = currentSyms" update below it
+    // entirely. With the tracker never advancing, every SUBSEQUENT
+    // Firebase update re-detected the exact same tickers as "new" and
+    // tried to alert on them again — hitting the same broken audio call
+    // and throwing again — forever, until a full page reload reset
+    // everything. Wrapping playback in try/catch guarantees the tracker
+    // always updates below regardless of what happens with audio, so a
+    // sound failure can never again turn into a permanent alert loop.
+    if (knownSymsForChannel !== null && soundOn){
+      entries.forEach(d => {
+        if (!knownSymsForChannel.has(d.sym)){
+          try {
+            if (d.visit && d.visit > 1) playAlertBeepRepeat();
+            else playAlertBeepFirst();
+          } catch (e) {
+            console.warn("Sound alert failed (tracker still advances normally):", e);
+          }
+        }
+      });
+    }
+    if (activeChannel === "focused") knownSymsFocused = currentSyms;
+    else knownSymsNormal = currentSyms;
+
+    // Search filtering happens AFTER sound/new-ticker tracking above is
     // computed from the FULL entries list — filtering the visible rows
     // must never affect which tickers count as "already seen", or
     // clearing the search box would wrongly replay sounds for tickers
@@ -1665,17 +1628,6 @@
     const displayEntries = searchQuery
       ? entries.filter(d => d.sym.includes(searchQuery))
       : entries;
-
-    const currentSyms = new Set(entries.map(d => d.sym));
-    if (knownSyms !== null && soundOn){
-      entries.forEach(d => {
-        if (!knownSyms.has(d.sym)){
-          if (d.visit && d.visit > 1) playAlertBeepRepeat();
-          else playAlertBeepFirst();
-        }
-      });
-    }
-    knownSyms = currentSyms;
 
     newsBySym = {};
     displayEntries.forEach(d => { newsBySym[d.sym] = Array.isArray(d.news) ? d.news : []; });
