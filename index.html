@@ -389,7 +389,6 @@
     font-family:var(--mono); font-size:10px; color:var(--dim);
     margin-left:8px; padding:1px 6px; border:1px solid var(--line); border-radius:20px;
   }
-  .visit.new-badge{ color:var(--hot); border-color:var(--hot-dim); font-weight:700; }
   .star-icon{
     display:inline-block; font-size:15px; color:var(--dim);
     margin-right:8px; cursor:pointer; line-height:1; vertical-align:-1px;
@@ -1554,6 +1553,62 @@
     }[c]));
   }
 
+  // Updates one row's dynamic content IN PLACE — called on every render
+  // for both brand-new rows (right after the template above is built)
+  // and existing ones. Never touches innerHTML on an existing row, which
+  // is what used to break the star icon's hover state and occasionally
+  // eat a click (see the comment where this is called from).
+  function updateRowContent(el, d, cls){
+    const pct = Math.max(0, Math.min(100, d._score));
+    const chgSign = (d.chg || 0) >= 0 ? "+" : "";
+    const chgClass = (d.chg || 0) >= 0 ? "pos" : "neg";
+    const maxChgVal = d.max_chg ?? d.chg ?? 0;
+    const maxChgSign = maxChgVal >= 0 ? "+" : "";
+    const news = Array.isArray(d.news) ? d.news : [];
+
+    const barEl = el.querySelector(".bar");
+    barEl.style.width = pct + "%";
+    barEl.style.background = barColor(cls);
+
+    const starEl = el.querySelector(".star-icon");
+    const starOn = isStarred(d.sym);
+    starEl.classList.toggle("starred", starOn);
+    starEl.textContent = starOn ? "★" : "☆";
+    starEl.title = starOn ? "Remove from favorites" : "Add to favorites";
+
+    // No badge at all for a ticker's first appearance today — only a
+    // repeat visit gets one, same principle as showing nothing rather
+    // than a placeholder when there's nothing extra to say.
+    const visitEl = el.querySelector(".visit");
+    if (d.visit > 1){
+      visitEl.textContent = ordinal(d.visit) + " time";
+      visitEl.style.display = "";
+    } else {
+      visitEl.textContent = "";
+      visitEl.style.display = "none";
+    }
+
+    const newsHtml = news.length
+      ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
+      : "";
+    el.querySelector(".news-inline").innerHTML = newsHtml;
+    el.querySelector(".cell-news").innerHTML = newsHtml;
+
+    const chgEl = el.querySelector(".cell-chg .chg");
+    chgEl.textContent = `${chgSign}${(d.chg ?? 0).toFixed(1)}%`;
+    chgEl.className = `chg ${chgClass}`;
+
+    el.querySelector(".cell-price .price").textContent =
+      d.price != null ? "$" + d.price.toFixed(2) : "—";
+
+    const scoreEl = el.querySelector(".cell-score .score");
+    scoreEl.textContent = `${cls === "extreme" ? "🔥 " : ""}${d._score.toFixed(0)}${cls === "extreme" ? " 🔥" : ""}`;
+    scoreEl.className = `score ${cls}`;
+
+    el.querySelector(".cell-maxchg .maxchg").textContent =
+      `${maxChgSign}${maxChgVal.toFixed(1)}%`;
+  }
+
   let lastData = null;
   const skeletonEl = document.getElementById("skeleton");
 
@@ -1642,6 +1697,29 @@
         el = document.createElement("div");
         el.className = "row";
         el.dataset.sym = d.sym;
+        // Built ONCE per row, with stable, addressable child elements —
+        // every subsequent render updates these in place (see
+        // updateRowContent below) instead of rebuilding via innerHTML.
+        // That used to destroy and recreate every child (including the
+        // star icon) on every single price/score update — up to 5x/sec
+        // per ticker — which broke the star's hover state mid-hover
+        // (looked like flashing) and could eat a click if a re-render
+        // landed between mousedown and mouseup on the old, now-removed
+        // element. Keeping the same DOM nodes alive across updates fixes
+        // both.
+        el.innerHTML = `
+          <div class="bar"></div>
+          <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">
+            <span class="star-icon" data-star-sym="${escapeHtml(d.sym)}"></span>
+            <span class="sym-text">${escapeHtml(d.sym)}</span>
+            <span class="visit"></span>
+            <span class="news-inline"></span>
+          </div>
+          <div class="cell-chg"><span class="lbl">Change</span><span class="chg"></span></div>
+          <div class="cell-price"><span class="lbl">Price</span><span class="price"></span></div>
+          <div class="cell-score"><span class="lbl">Score</span><span class="score"></span></div>
+          <div class="cell-maxchg"><span class="lbl">Max Change</span><span class="maxchg"></span></div>
+          <div class="cell-news news-cell"></div>`;
         rowsEl.appendChild(el);
         rowEls[d.sym] = el;
         if (cls === "extreme" || cls === "hot") el.classList.add("flash-strong");
@@ -1659,37 +1737,7 @@
       // icon) for as long as the score stays above 500, updated every
       // render rather than only at the moment it first crosses the line.
       el.classList.toggle("extreme-hot", cls === "extreme");
-      const pct = Math.max(0, Math.min(100, d._score));
-      const chgSign = (d.chg || 0) >= 0 ? "+" : "";
-      const chgClass = (d.chg || 0) >= 0 ? "pos" : "neg";
-      const maxChgVal = d.max_chg ?? d.chg ?? 0;
-      const maxChgSign = maxChgVal >= 0 ? "+" : "";
-      const news = Array.isArray(d.news) ? d.news : [];
-      const newsIcon = news.length
-        ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
-        : "";
-      const starOn = isStarred(d.sym);
-      const starIcon = `<span class="star-icon${starOn ? " starred" : ""}" data-star-sym="${escapeHtml(d.sym)}" title="${starOn ? "Remove from favorites" : "Add to favorites"}">${starOn ? "★" : "☆"}</span>`;
-      const visitBadge = d.visit > 1
-        ? `<span class="visit">${ordinal(d.visit)} time</span>`
-        : `<span class="visit new-badge">NEW</span>`;
-      // Per-row tooltip: only Change%/Max Change% and the score are ever
-      // published per-ticker (see index.html's payload notes near
-      // _web_build_payload on the app side) — never raw volume, so this
-      // sticks to what's actually available rather than fabricating a
-      // number. Native title attribute — simplest option, works
-      // everywhere, no extra positioning logic needed.
-      el.title = `${d.sym}: up ${chgSign}${(d.chg ?? 0).toFixed(1)}% today `
-                + `(peak ${maxChgSign}${maxChgVal.toFixed(1)}%) — matches the site's live criteria. `
-                + `Click anywhere in this row to copy the symbol.`;
-      el.innerHTML = `
-        <div class="bar" style="width:${pct}%; background:${barColor(cls)}"></div>
-        <div class="cell-sym sym" data-sym="${escapeHtml(d.sym)}">${starIcon}${escapeHtml(d.sym)}${visitBadge}<span class="news-inline">${newsIcon}</span></div>
-        <div class="cell-chg"><span class="lbl">Change</span><span class="chg ${chgClass}">${chgSign}${(d.chg ?? 0).toFixed(1)}%</span></div>
-        <div class="cell-price"><span class="lbl">Price</span><span class="price">${d.price != null ? "$" + d.price.toFixed(2) : "—"}</span></div>
-        <div class="cell-score"><span class="lbl">Score</span><span class="score ${cls}">${cls === "extreme" ? "🔥 " : ""}${d._score.toFixed(0)}${cls === "extreme" ? " 🔥" : ""}</span></div>
-        <div class="cell-maxchg"><span class="lbl">Max Change</span><span class="maxchg">${maxChgSign}${maxChgVal.toFixed(1)}%</span></div>
-        <div class="cell-news news-cell">${newsIcon}</div>`;
+      updateRowContent(el, d, cls);
     });
 
     // remove rows no longer present/active
