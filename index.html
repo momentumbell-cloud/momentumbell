@@ -455,6 +455,22 @@
   }
 
   .sound-wrap{ position:relative; display:inline-flex; align-items:center; gap:4px; }
+  .sound-menu{
+    display:none; position:absolute; top:calc(100% + 8px); left:0; z-index:40;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:6px; width:240px;
+    box-shadow:0 12px 32px rgba(0,0,0,.5);
+  }
+  .sound-menu.open{ display:block; }
+  .sound-menu-item{
+    display:flex; align-items:center; gap:10px; width:100%;
+    background:none; border:none; color:var(--text); text-align:left;
+    font-family:var(--sans); font-size:12.5px; padding:9px 10px; border-radius:7px;
+    cursor:pointer; transition:background .12s ease;
+  }
+  .sound-menu-item:hover{ background:var(--input); }
+  .sound-menu-item.active{ color:var(--hot); font-weight:600; }
+  .sound-menu-item .smi-icon{ font-size:14px; flex:none; width:18px; text-align:center; }
 
   .dropped-section{ margin-top:8px; }
   .dropped-section h2{
@@ -548,13 +564,25 @@
   </div>
   <div class="hdr-right">
     <div class="sound-wrap">
-      <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false">
+      <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false" aria-haspopup="true">
         <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
       </button>
+      <div class="sound-menu" id="sound-menu">
+        <button class="sound-menu-item" data-mode="momentum" type="button">
+          <span class="smi-icon">📈</span><span class="smi-text">Stocks building momentum only</span>
+        </button>
+        <button class="sound-menu-item" data-mode="all" type="button">
+          <span class="smi-icon">🔔</span><span class="smi-text">All new stocks + momentum</span>
+        </button>
+        <button class="sound-menu-item" data-mode="off" type="button">
+          <span class="smi-icon">🔇</span><span class="smi-text">Off</span>
+        </button>
+      </div>
       <i class="info-dot">i</i>
       <div class="legend">
         <div class="legend-row" style="align-items:flex-start;">🔔🔔 Two-tone chime — a ticker's first appearance today.</div>
         <div class="legend-row" style="align-items:flex-start; margin-top:6px;">🔔 Single tone — a repeat appearance of the same ticker.</div>
+        <div class="legend-row" style="align-items:flex-start; margin-top:6px;">📈 Rising chime — a ticker's Momentum Bell Score just crossed 100.</div>
       </div>
     </div>
     <div class="live-wrap">
@@ -730,11 +758,12 @@
 
     <div class="guide-step" data-step="3">
       <h3>🔔 Turn sound on</h3>
-      <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page to get an audio alert the instant a new ticker qualifies — no need to keep watching the screen.</p>
-      <div class="guide-sound-demo">🔊 Sound: On</div>
+      <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page and pick a mode — get an audio alert without needing to keep watching the screen.</p>
+      <div class="guide-sound-demo">🔊 Sound: Momentum</div>
       <ul class="guide-legend" style="margin-top:10px;">
-        <li>🔔🔔 <b>Two-tone bell</b> — a ticker's first appearance today.</li>
-        <li>🔔 <b>Single bell</b> — a repeat appearance of the same ticker.</li>
+        <li>📈 <b>Rising chime</b> — a ticker's score just crossed 100 (building momentum).</li>
+        <li>🔔🔔 <b>Two-tone bell</b> — a ticker's first appearance today (only in "All new stocks" mode).</li>
+        <li>🔔 <b>Single bell</b> — a repeat appearance of the same ticker (only in "All new stocks" mode).</li>
       </ul>
       <p class="hint" style="margin-top:12px;">One last thing — if anything here is confusing or you think of something that would make this more useful, tap <b>💬 Feedback</b> in the footer any time. Your feedback genuinely shapes what we build next.</p>
     </div>
@@ -1306,29 +1335,47 @@
     }
   });
 
-  // ── Sound alert on new ticker (preference persisted across visits) ──────
-  const SOUND_KEY_STORAGE = "mb_sound_on";
-  function loadSoundPref(){
-    try { return localStorage.getItem(SOUND_KEY_STORAGE) === "1"; }
-    catch(e){ return false; }
+  // ── Sound alert (mode persisted across visits) ──────────────────────────
+  // Three modes instead of the old simple on/off: "off", "momentum"
+  // (only the rising-chime alert when a ticker's score crosses 100 —
+  // listed first in the menu since it's the lighter-weight option), and
+  // "all" (every new-ticker chime PLUS the momentum chime).
+  const SOUND_MODE_STORAGE = "mb_sound_mode";
+  const SOUND_KEY_STORAGE_LEGACY = "mb_sound_on";   // old binary pref — migrated once below, then unused
+  function loadSoundMode(){
+    try {
+      const saved = localStorage.getItem(SOUND_MODE_STORAGE);
+      if (saved === "off" || saved === "momentum" || saved === "all") return saved;
+      // First run after this update — carry a returning visitor's old
+      // binary preference forward instead of silently resetting them to
+      // Off: "on" becomes "all" (closest match to their old experience).
+      const legacy = localStorage.getItem(SOUND_KEY_STORAGE_LEGACY);
+      return legacy === "1" ? "all" : "off";
+    } catch(e){ return "off"; }
   }
-  function saveSoundPref(){
-    try { localStorage.setItem(SOUND_KEY_STORAGE, soundOn ? "1" : "0"); }
-    catch(e){ /* non-fatal */ }
+  function saveSoundMode(){
+    try { localStorage.setItem(SOUND_MODE_STORAGE, soundMode); } catch(e){ /* non-fatal */ }
   }
-  let soundOn = loadSoundPref();
+  let soundMode = loadSoundMode();
   let audioCtx = null;
   let knownSymsNormal = null;   // null = haven't rendered this channel yet, so its first batch never triggers a sound
   let knownSymsFocused = null;  // same, but tracked independently for the Focused feed — see the fix note in render()
+  let momentumAlertedNormal = null;   // symbols currently >=100 that have already had their momentum chime played, per channel
+  let momentumAlertedFocused = null;
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
   const soundLabel = document.getElementById("sound-label");
+  const soundMenu = document.getElementById("sound-menu");
   function applySoundUI(){
-    soundBtn.classList.toggle("on", soundOn);
-    if (soundOn) soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
-    soundBtn.setAttribute("aria-pressed", String(soundOn));
-    soundIcon.textContent = soundOn ? "🔊" : "🔇";
-    soundLabel.textContent = soundOn ? "Sound: On" : "Sound: Off";
+    const on = soundMode !== "off";
+    soundBtn.classList.toggle("on", on);
+    if (on) soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
+    soundBtn.setAttribute("aria-pressed", String(on));
+    soundIcon.textContent = on ? "🔊" : "🔇";
+    soundLabel.textContent = !on ? "Sound: Off" : (soundMode === "momentum" ? "Sound: Momentum" : "Sound: On");
+    soundMenu.querySelectorAll(".sound-menu-item").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.mode === soundMode);
+    });
   }
   applySoundUI();   // reflect the remembered preference immediately on load
   // Browsers block audio playback without a user gesture, even if the
@@ -1337,7 +1384,7 @@
   // suspended state) and this one-time listener resumes it the moment
   // the visitor interacts with the page at all, rather than waiting for
   // them to specifically click the sound button again.
-  if (soundOn){
+  if (soundMode !== "off"){
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const resumeOnce = () => {
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
@@ -1347,14 +1394,23 @@
     document.addEventListener("click", resumeOnce);
     document.addEventListener("keydown", resumeOnce);
   }
-  soundBtn.addEventListener("click", () => {
-    soundOn = !soundOn;
-    applySoundUI();
-    saveSoundPref();
-    if (soundOn && !audioCtx){
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
+  soundBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    soundMenu.classList.toggle("open");
   });
+  soundMenu.querySelectorAll(".sound-menu-item").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      soundMode = btn.dataset.mode;
+      applySoundUI();
+      saveSoundMode();
+      if (soundMode !== "off" && !audioCtx){
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      soundMenu.classList.remove("open");
+    });
+  });
+  document.addEventListener("click", () => soundMenu.classList.remove("open"));
   // Two distinct alert tones: an actual BELL sound (to match the site's
   // name and logo) — a two-strike ring the first time a ticker appears
   // today, and a single strike for any repeat appearance of the same
@@ -1415,6 +1471,18 @@
     ensureAudioCtx();
     if (!audioCtx) return;
     ringBell(audioCtx.currentTime, 700, 0.28, 0.90);   // single strike
+  }
+  function playAlertMomentum(){
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    // Three quick ASCENDING strikes, higher-pitched and faster than the
+    // other two alerts — deliberately reads as more energetic/urgent, to
+    // distinguish "this one's actually building momentum" (score just
+    // crossed 100) from a plain "new ticker showed up" chime.
+    ringBell(now,        660,  0.26, 0.55);
+    ringBell(now + 0.14, 880,  0.28, 0.55);
+    ringBell(now + 0.28, 1100, 0.32, 0.65);
   }
 
   // ── News popup — one shared, fixed-position tooltip, click-driven so it
@@ -1645,6 +1713,8 @@
     // seen" set separately fixes that; a channel's own tracker only
     // ever gets compared against that SAME channel's own previous data.
     const knownSymsForChannel = activeChannel === "focused" ? knownSymsFocused : knownSymsNormal;
+    const momentumAlertedForChannel = activeChannel === "focused" ? momentumAlertedFocused : momentumAlertedNormal;
+    const currentAbove100 = new Set(entries.filter(d => d._score >= 100).map(d => d.sym));
     // v0.137+ FIX — the REAL, long-standing cause of "keeps bursting
     // continuous sound alerts until I close and reopen": browsers can
     // put an AudioContext into a "closed" state to reclaim resources
@@ -1652,17 +1722,23 @@
     // expected browser behavior, not a bug in ringBell itself). Calling
     // ctx.createOscillator() on a closed context throws — and that
     // exception, thrown from INSIDE this forEach, used to abort the
-    // whole loop AND skip the "knownSyms = currentSyms" update below it
-    // entirely. With the tracker never advancing, every SUBSEQUENT
-    // Firebase update re-detected the exact same tickers as "new" and
+    // whole loop AND skip the tracker updates below it entirely. With
+    // the trackers never advancing, every SUBSEQUENT Firebase update
+    // re-detected the exact same tickers as "new"/"just crossed 100" and
     // tried to alert on them again — hitting the same broken audio call
     // and throwing again — forever, until a full page reload reset
-    // everything. Wrapping playback in try/catch guarantees the tracker
-    // always updates below regardless of what happens with audio, so a
+    // everything. Wrapping playback in try/catch guarantees the trackers
+    // always update below regardless of what happens with audio, so a
     // sound failure can never again turn into a permanent alert loop.
-    if (knownSymsForChannel !== null && soundOn){
+    //
+    // v0.139+: "all" mode plays the new-ticker chimes below (same as the
+    // old always-on behavior); "momentum" mode skips those entirely and
+    // only plays when a ticker's score crosses 100 from below — which
+    // fires in BOTH "momentum" and "all" modes, since "all" means "new
+    // stocks IN ADDITION TO momentum," not "instead of."
+    if (knownSymsForChannel !== null && soundMode !== "off"){
       entries.forEach(d => {
-        if (!knownSymsForChannel.has(d.sym)){
+        if (soundMode === "all" && !knownSymsForChannel.has(d.sym)){
           try {
             if (d.visit && d.visit > 1) playAlertBeepRepeat();
             else playAlertBeepFirst();
@@ -1670,10 +1746,22 @@
             console.warn("Sound alert failed (tracker still advances normally):", e);
           }
         }
+        if (d._score >= 100 && momentumAlertedForChannel && !momentumAlertedForChannel.has(d.sym)){
+          try {
+            playAlertMomentum();
+          } catch (e) {
+            console.warn("Momentum sound alert failed (tracker still advances normally):", e);
+          }
+        }
       });
     }
-    if (activeChannel === "focused") knownSymsFocused = currentSyms;
-    else knownSymsNormal = currentSyms;
+    if (activeChannel === "focused"){
+      knownSymsFocused = currentSyms;
+      momentumAlertedFocused = currentAbove100;
+    } else {
+      knownSymsNormal = currentSyms;
+      momentumAlertedNormal = currentAbove100;
+    }
 
     // Search filtering happens AFTER sound/new-ticker tracking above is
     // computed from the FULL entries list — filtering the visible rows
