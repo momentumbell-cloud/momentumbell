@@ -564,17 +564,9 @@
   </div>
   <div class="hdr-right">
     <div class="sound-wrap">
-      <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false" aria-haspopup="true">
+      <button class="pill-btn sound-hint" id="sound-toggle" type="button" aria-pressed="false" title="Click to toggle sound on/off">
         <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
       </button>
-      <div class="sound-menu" id="sound-menu">
-        <button class="sound-menu-item" data-mode="on" type="button">
-          <span class="smi-icon">🔔</span><span class="smi-text">On</span>
-        </button>
-        <button class="sound-menu-item" data-mode="off" type="button">
-          <span class="smi-icon">🔇</span><span class="smi-text">Off</span>
-        </button>
-      </div>
       <i class="info-dot">i</i>
       <div class="legend">
         <div class="legend-row" style="align-items:flex-start;">📈 Rising chime — plays when a ticker's Momentum Bell Score just crossed 100. That's the only alert sound; no sound plays for a ticker simply appearing on the list.</div>
@@ -816,6 +808,40 @@
   const liveDot = document.getElementById("live-dot");
   const rowEls = {};   // sym -> DOM row element, so updates animate in place
 
+  // ── NYSE holiday calendar (v0.143+) ──────────────────────────────────
+  // Full-day closures, ISO date (America/New_York). Sourced from NYSE
+  // Group's official published calendar. Needs a manual add each year —
+  // there's no live feed for this, so it'll silently stop accounting
+  // for holidays once this list runs out (currently through end of
+  // 2027). Deliberately doesn't attempt to compute Good Friday/Easter
+  // algorithmically — a short hardcoded list is far less error-prone
+  // than getting that math right in the browser.
+  const NYSE_FULL_HOLIDAYS = new Set([
+    "2026-09-07",  // Labor Day
+    "2026-11-26",  // Thanksgiving
+    "2026-12-25",  // Christmas Day
+    "2027-01-01",  // New Year's Day
+    "2027-01-18",  // Martin Luther King, Jr. Day
+    "2027-02-15",  // Washington's Birthday
+    "2027-03-26",  // Good Friday
+    "2027-05-31",  // Memorial Day
+    "2027-06-18",  // Juneteenth (observed — Jun 19 falls on a Saturday)
+    "2027-07-05",  // Independence Day (observed — Jul 4 falls on a Sunday)
+    "2027-09-06",  // Labor Day
+    "2027-11-25",  // Thanksgiving
+    "2027-12-24",  // Christmas Day (observed — Dec 25 falls on a Saturday)
+  ]);
+  // 1:00 PM ET early closes (day after Thanksgiving, Christmas Eve when
+  // it isn't itself the observed Christmas holiday).
+  const NYSE_EARLY_CLOSES = new Set([
+    "2026-11-27",
+    "2026-12-24",
+    "2027-11-26",
+  ]);
+  function isoDateET(d){
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d); // YYYY-MM-DD
+  }
+
   // ── ET CLOCK — small corner badge, hours:minutes only ───────────────────
   // "EST" is what traders call it colloquially, but the US market actually
   // runs on Eastern Time (which is EDT for most of the year) — using the
@@ -834,26 +860,30 @@
   setInterval(updateETClock, 15000);   // recomputed often enough to never visibly lag a minute rollover, without ever showing seconds
 
   // ── Market session badge ─────────────────────────────────────────────
-  // Standard US equity session windows in ET. Deliberately does NOT
-  // account for market holidays (Thanksgiving, etc.) — those are only a
-  // handful of days a year and would need a maintained holiday calendar
-  // to get right; "closed" on an ordinary weekday afternoon because it's
-  // actually a holiday is a rare, low-cost mistake compared to the
-  // complexity of tracking it, so this sticks to day-of-week + time-of-
-  // day only.
+  // v0.143+ — now accounts for the NYSE holiday calendar (full closures
+  // show "closed" all day; the two 1:00 PM early-close days shift the
+  // regular→afterhours boundary back 3 hours) — previously deliberately
+  // skipped this, which is exactly why full holidays used to show
+  // "closed" all day as an accident of it being a weekday afternoon,
+  // not because it was actually recognized as a holiday; the wording
+  // just happened to be right, the reasoning wasn't.
   const sessionBadgeEl = document.getElementById("session-badge");
   function getMarketSession(){
+    const now = new Date();
+    const today = isoDateET(now);
+    if (NYSE_FULL_HOLIDAYS.has(today)) return "closed";
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/New_York", hour: "numeric", minute: "numeric",
       hour12: false, weekday: "short"
-    }).formatToParts(new Date());
+    }).formatToParts(now);
     const get = t => parts.find(p => p.type === t)?.value || "";
     const day = get("weekday");
     const mins = Number(get("hour")) * 60 + Number(get("minute"));
     if (day === "Sat" || day === "Sun") return "closed";
-    if (mins >= 4*60   && mins < 9*60+30)  return "premarket";
-    if (mins >= 9*60+30 && mins < 16*60)   return "regular";
-    if (mins >= 16*60  && mins < 20*60)    return "afterhours";
+    const regularCloseMin = NYSE_EARLY_CLOSES.has(today) ? 13*60 : 16*60;
+    if (mins >= 4*60   && mins < 9*60+30)     return "premarket";
+    if (mins >= 9*60+30 && mins < regularCloseMin) return "regular";
+    if (mins >= regularCloseMin && mins < 20*60)   return "afterhours";
     return "closed";
   }
   function updateSessionBadge(){
@@ -869,7 +899,13 @@
     sessionBadgeEl.innerHTML = `<span class="sb-dot"></span>${labels[session]}`;
   }
   updateSessionBadge();
-  setInterval(updateSessionBadge, 15000);
+  // v0.143+ — was setInterval(updateSessionBadge, 15000), which meant
+  // the badge (and everything gated on it — hiding rows, the Dropped
+  // section, the closed-market greeting) could lag a real transition
+  // (market open, close, etc.) by up to 15 seconds. Every 1 second is
+  // cheap (this is a handful of Intl calls, not real work) and brings
+  // that worst case down to ~1s, which reads as "instant" to a person.
+  setInterval(updateSessionBadge, 1000);
 
   // ── Daily Disclaimer overlay ─────────────────────────────────────────
   // Shown once per calendar day (ET, matching the trading day rather than
@@ -1370,7 +1406,6 @@
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
   const soundLabel = document.getElementById("sound-label");
-  const soundMenu = document.getElementById("sound-menu");
   function applySoundUI(){
     const on = soundMode === "on";
     soundBtn.classList.toggle("on", on);
@@ -1378,9 +1413,6 @@
     soundBtn.setAttribute("aria-pressed", String(on));
     soundIcon.textContent = on ? "🔊" : "🔇";
     soundLabel.textContent = on ? "Sound: On" : "Sound: Off";
-    soundMenu.querySelectorAll(".sound-menu-item").forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.mode === soundMode);
-    });
   }
   applySoundUI();   // reflect the remembered preference immediately on load
   // Browsers block audio playback without a user gesture, even if the
@@ -1399,23 +1431,19 @@
     document.addEventListener("click", resumeOnce);
     document.addEventListener("keydown", resumeOnce);
   }
+  // v0.143+ — a single click now toggles Sound directly between On/Off,
+  // no dropdown to open first. With only two states left (since the
+  // "All new stocks" mode was removed), a picker menu was one extra step
+  // for no real choice — simpler to just flip it.
   soundBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    soundMenu.classList.toggle("open");
+    soundMode = soundMode === "on" ? "off" : "on";
+    applySoundUI();
+    saveSoundMode();
+    if (soundMode === "on" && !audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
   });
-  soundMenu.querySelectorAll(".sound-menu-item").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      soundMode = btn.dataset.mode;
-      applySoundUI();
-      saveSoundMode();
-      if (soundMode === "on" && !audioCtx){
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      soundMenu.classList.remove("open");
-    });
-  });
-  document.addEventListener("click", () => soundMenu.classList.remove("open"));
   // Two distinct alert tones: an actual BELL sound (to match the site's
   // name and logo) — a two-strike ring the first time a ticker appears
   // today, and a single strike for any repeat appearance of the same
@@ -1661,6 +1689,12 @@
       visitEl.style.display = "none";
     }
 
+    // v0.143+ — Focus-tab search fallback: this row is a match pulled in
+    // from All Movers because it isn't (yet) in Focus — see render()'s
+    // displayEntries. Note it plainly so it doesn't look like a Focus bug.
+    const amNoteEl = el.querySelector(".all-movers-note");
+    if (amNoteEl) amNoteEl.style.display = d._fromAllMovers ? "" : "none";
+
     const newsHtml = news.length
       ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
       : "";
@@ -1697,7 +1731,14 @@
       closeNewsTip();
     }
     const now = Date.now();
-    const entries = Object.values(data || {})
+    // v0.143+ — while the market's closed, don't show any tickers at
+    // all (stale weekend/overnight data with zero-ish values was
+    // confusing visitors) — the empty state's closed-market greeting
+    // takes over instead. STALE_MS itself already goes most of the way
+    // to filtering this out during the week, but doesn't help over a
+    // full weekend where SOME feeds are still sub-STALE_MS old.
+    const marketClosedNow = getMarketSession() === "closed";
+    const entries = marketClosedNow ? [] : Object.values(data || {})
       .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS)
       .map(d => ({ ...d, _score: attentionScore(d) }))
       .sort((a, b) => {
@@ -1763,9 +1804,22 @@
     // must never affect which tickers count as "already seen", or
     // clearing the search box would wrongly replay sounds for tickers
     // that were never actually new.
-    const displayEntries = searchQuery
+    let displayEntries = searchQuery
       ? entries.filter(d => d.sym.includes(searchQuery))
       : entries;
+    // v0.143+ — on the Focus tab, a search match that's in All Movers
+    // but isn't (yet) in Focus is still shown, annotated, instead of
+    // looking like a dead end — Focus is just a narrower view of the
+    // same underlying All Movers universe, so "not in Focus" usually
+    // means "hasn't cleared the tighter bar", not "doesn't exist".
+    if (searchQuery && activeChannel === "focused" && !marketClosedNow){
+      const already = new Set(displayEntries.map(d => d.sym));
+      const extra = Object.values(lastDataNormal || {})
+        .filter(d => d && d.active !== false && (now - (d.ts || 0)) < STALE_MS
+                    && d.sym.includes(searchQuery) && !already.has(d.sym))
+        .map(d => ({ ...d, _score: attentionScore(d), _fromAllMovers: true }));
+      displayEntries = displayEntries.concat(extra);
+    }
 
     newsBySym = {};
     displayEntries.forEach(d => { newsBySym[d.sym] = Array.isArray(d.news) ? d.news : []; });
@@ -1796,6 +1850,7 @@
             <span class="star-icon" data-star-sym="${escapeHtml(d.sym)}"></span>
             <span class="sym-text">${escapeHtml(d.sym)}</span>
             <span class="visit"></span>
+            <span class="all-movers-note" style="display:none; font-size:10px; opacity:.6; margin-left:6px;">in All Movers</span>
             <span class="news-inline"></span>
           </div>
           <div class="cell-chg"><span class="lbl">Change</span><span class="chg"></span></div>
@@ -1863,6 +1918,93 @@
 
   const emptyMainEl = document.getElementById("empty-main");
   const emptySubEl  = document.getElementById("empty-sub");
+
+  // ── Market-closed greetings (v0.143+) ────────────────────────────────
+  // Picked deterministically from calendar day-of-year, not randomly —
+  // same message all the way through one closed stretch (no flicker
+  // between renders/reloads), naturally different from one day to the
+  // next. Doesn't need a live backend to "rotate periodically" — this
+  // achieves that on its own.
+  function dayOfYearET(d){
+    const start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d - start) / 86400000);
+  }
+  function pick(pool, seed){
+    return pool[((seed % pool.length) + pool.length) % pool.length];
+  }
+  const GREET_WEEKEND = [
+    { main: "Happy weekend! 👋",                      sub: "Markets reopen Monday at 4:00 AM ET for premarket." },
+    { main: "Enjoy the weekend.",                     sub: "Back Monday at 4:00 AM ET for premarket." },
+    { main: "Markets are closed for the weekend.",    sub: "See you Monday at 4:00 AM ET." },
+    { main: "Have a good one. 🙂",                     sub: "Premarket resumes Monday at 4:00 AM ET." },
+    { main: "Weekend mode. No charts today.",         sub: "We'll be back Monday at 4:00 AM ET." },
+  ];
+  const GREET_LONG_WEEKEND = [
+    { main: "Happy long weekend! 🎉",                  sub: "Markets are closed Monday too — back Tuesday at 4:00 AM ET." },
+    { main: "A long weekend is ahead. Plan something.", sub: "Markets reopen Tuesday at 4:00 AM ET." },
+    { main: "Enjoy the extra day off.",                sub: "Back Tuesday at 4:00 AM ET for premarket." },
+    { main: "Three-day weekend — make it count.",      sub: "We'll see you Tuesday at 4:00 AM ET." },
+  ];
+  const GREET_HOLIDAY = [
+    { main: "Markets are closed today for the holiday.", sub: "Back tomorrow at 4:00 AM ET for premarket." },
+    { main: "Happy holiday! 🎊",                          sub: "Trading resumes tomorrow at 4:00 AM ET." },
+    { main: "No trading today — enjoy the holiday.",      sub: "Premarket returns tomorrow at 4:00 AM ET." },
+  ];
+  const GREET_EVENING = [
+    { main: "That's a wrap for today. 🌙",             sub: "Back tomorrow at 4:00 AM ET for premarket." },
+    { main: "Markets are closed for the day.",         sub: "Premarket opens tomorrow at 4:00 AM ET." },
+    { main: "Good evening.",                           sub: "See you tomorrow at 4:00 AM ET." },
+    { main: "Day's done — rest up.",                   sub: "We'll be back tomorrow at 4:00 AM ET." },
+  ];
+  const GREET_PREMARKET_WAIT = [
+    { main: "Good early morning. ☕",                  sub: "Grab a coffee — premarket opens at 4:00 AM ET." },
+    { main: "Rise and shine.",                        sub: "Be ready — premarket opens at 4:00 AM ET." },
+    { main: "Almost showtime.",                       sub: "Premarket kicks off at 4:00 AM ET." },
+    { main: "Quiet before the open.",                 sub: "Grab a coffee and get ready — 4:00 AM ET." },
+  ];
+  function nextTradingDayLabel(baseDate, isoDate){
+    // Is baseDate a Friday (or the day before a Monday holiday) whose
+    // very next calendar day AND the day after that are both non-
+    // trading (weekend and/or holiday)? If so, it's the start of a long
+    // weekend rather than an ordinary one.
+    const d = new Date(baseDate);
+    let skipped = 0;
+    for (let i = 1; i <= 4; i++){
+      const probe = new Date(d);
+      probe.setDate(probe.getDate() + i);
+      const probeIso = isoDateET(probe);
+      const probeDay = new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", weekday:"short" }).format(probe);
+      const isNonTrading = probeDay === "Sat" || probeDay === "Sun" || NYSE_FULL_HOLIDAYS.has(probeIso);
+      if (isNonTrading) skipped++; else return skipped;
+    }
+    return skipped;
+  }
+  function getClosedGreeting(){
+    const now = new Date();
+    const today = isoDateET(now);
+    const dow = dayOfYearET(now);
+    const dayName = new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", weekday:"short" }).format(now);
+    const hourET = Number(new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", hour:"numeric", hour12:false }).format(now));
+    const isWeekend = dayName === "Sat" || dayName === "Sun";
+    const isHoliday = NYSE_FULL_HOLIDAYS.has(today);
+
+    if (isWeekend || isHoliday){
+      // A "long weekend" is any stretch where at least 2 consecutive
+      // non-trading days follow (covers both a Monday holiday extending
+      // a normal weekend, and a Friday holiday starting one early).
+      const consecutiveNonTrading = nextTradingDayLabel(now, today);
+      const isLong = consecutiveNonTrading >= 2 || (isWeekend && (NYSE_FULL_HOLIDAYS.has(isoDateET(new Date(now.getTime()+86400000))) ));
+      if (isHoliday && !isWeekend) return pick(GREET_HOLIDAY, dow);
+      return pick(isLong ? GREET_LONG_WEEKEND : GREET_WEEKEND, dow);
+    }
+    // Ordinary weekday, market just closed for hours purposes — split
+    // the overnight window at midnight ET: right after the close reads
+    // as "evening", closer to premarket reads as "get ready".
+    return (hourET >= 20 || hourET < 4)
+      ? (hourET < 4 ? pick(GREET_PREMARKET_WAIT, dow) : pick(GREET_EVENING, dow))
+      : pick(GREET_EVENING, dow);
+  }
+
   function updateEmptyMessage(){
     if (!emptyMainEl || !emptySubEl) return;
     if (searchQuery){
@@ -1872,12 +2014,9 @@
     }
     const session = getMarketSession();
     if (session === "closed"){
-      const isWeekend = ["Sat","Sun"].includes(
-        new Intl.DateTimeFormat("en-US", { timeZone:"America/New_York", weekday:"short" }).format(new Date()));
-      emptyMainEl.textContent = "💤 Markets are closed right now.";
-      emptySubEl.textContent = isWeekend
-        ? " Check back Monday at 4:00 AM ET when premarket opens."
-        : " Back at 4:00 AM ET for premarket.";
+      const g = getClosedGreeting();
+      emptyMainEl.textContent = g.main;
+      emptySubEl.textContent = " " + g.sub;
     } else {
       emptyMainEl.textContent = "No active movers right now.";
       emptySubEl.textContent = "";
@@ -1885,10 +2024,27 @@
   }
 
   function renderDropped(data){
+    // v0.143+ — while the market's closed, the dropped section is
+    // suppressed too (same reasoning as hiding the main rows — stale
+    // weekend/overnight entries were confusing, not useful).
+    if (getMarketSession() === "closed"){
+      droppedSection.style.display = "none";
+      droppedRowsEl.innerHTML = "";
+      return;
+    }
     let dropped = Object.values(data || {})
       .filter(d => d && d.active === false && d.reason === "dropped")
       .sort((a, b) => (b.max_chg ?? b.chg ?? 0) - (a.max_chg ?? a.chg ?? 0));
     if (searchQuery) dropped = dropped.filter(d => d.sym.includes(searchQuery));
+    // v0.143+ — on the Focus tab specifically, narrow this down further:
+    // Focus's dropped list = All Movers' dropped list, MINUS tickers
+    // that never actually appeared in Focus today. A ticker that only
+    // ever qualified for the broader All Movers filter was never "in
+    // Focus" to begin with, so it has no business showing as "dropped
+    // from Focus" — it was never there.
+    if (activeChannel === "focused"){
+      dropped = dropped.filter(d => focusEverSeenToday.has(d.sym));
+    }
 
     droppedSection.style.display = dropped.length ? "block" : "none";
     droppedRowsEl.innerHTML = dropped.map(d => {
@@ -1905,6 +2061,26 @@
     const s = ["th","st","nd","rd"], v = n % 100;
     return n + (s[(v-20)%10] || s[v] || s[0]);
   }
+
+  // v0.143+ — which symbols have appeared in Focus (as computed
+  // client-side below) at any point TODAY. Persisted per-ET-day so a
+  // page reload mid-session doesn't lose the "ever seen" history — see
+  // renderDropped's Focus-specific filter above, which depends on this.
+  const FOCUS_SEEN_STORAGE_PREFIX = "mb_focus_seen_";
+  function loadFocusSeenToday(){
+    try {
+      const raw = localStorage.getItem(FOCUS_SEEN_STORAGE_PREFIX + todayET());
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch(e){ return new Set(); }
+  }
+  function markFocusSeenToday(syms){
+    let changed = false;
+    syms.forEach(sym => { if (!focusEverSeenToday.has(sym)){ focusEverSeenToday.add(sym); changed = true; } });
+    if (!changed) return;
+    try { localStorage.setItem(FOCUS_SEEN_STORAGE_PREFIX + todayET(), JSON.stringify([...focusEverSeenToday])); }
+    catch(e){ /* non-fatal — worst case this just doesn't survive a reload */ }
+  }
+  let focusEverSeenToday = loadFocusSeenToday();
 
   // v0.141+ — Focus list (formerly "Focused") is no longer its own live
   // Firebase feed pushed by the Cockpit. Per the redesign, funneling now
@@ -1934,6 +2110,7 @@
   }
   function recomputeFocusData(){
     lastDataFocused = computeFocusData(lastDataNormal, lastCriteriaFocused);
+    markFocusSeenToday(Object.keys(lastDataFocused));
   }
 
   ref.on("value", snap => {
