@@ -568,11 +568,8 @@
         <span id="sound-icon">🔇</span><span id="sound-label">Sound: Off</span>
       </button>
       <div class="sound-menu" id="sound-menu">
-        <button class="sound-menu-item" data-mode="momentum" type="button">
-          <span class="smi-icon">📈</span><span class="smi-text">Stocks building momentum only</span>
-        </button>
-        <button class="sound-menu-item" data-mode="all" type="button">
-          <span class="smi-icon">🔔</span><span class="smi-text">All new stocks + momentum</span>
+        <button class="sound-menu-item" data-mode="on" type="button">
+          <span class="smi-icon">🔔</span><span class="smi-text">On</span>
         </button>
         <button class="sound-menu-item" data-mode="off" type="button">
           <span class="smi-icon">🔇</span><span class="smi-text">Off</span>
@@ -580,9 +577,7 @@
       </div>
       <i class="info-dot">i</i>
       <div class="legend">
-        <div class="legend-row" style="align-items:flex-start;">🔔🔔 Two-tone chime — a ticker's first appearance today.</div>
-        <div class="legend-row" style="align-items:flex-start; margin-top:6px;">🔔 Single tone — a repeat appearance of the same ticker.</div>
-        <div class="legend-row" style="align-items:flex-start; margin-top:6px;">📈 Rising chime — a ticker's Momentum Bell Score just crossed 100.</div>
+        <div class="legend-row" style="align-items:flex-start;">📈 Rising chime — plays when a ticker's Momentum Bell Score just crossed 100. That's the only alert sound; no sound plays for a ticker simply appearing on the list.</div>
       </div>
     </div>
     <div class="live-wrap">
@@ -647,6 +642,7 @@
         Loading current removal criteria…
       </div>
     </h2>
+    <div class="dropped-caption" style="font-size:11px; opacity:.65; margin:-4px 0 8px;">Number beside each ticker is the max Change% it reached today.</div>
     <div class="dropped-rows" id="dropped-rows"></div>
   </div>
 </main>
@@ -758,12 +754,10 @@
 
     <div class="guide-step" data-step="3">
       <h3>🔔 Turn sound on</h3>
-      <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page and pick a mode — get an audio alert without needing to keep watching the screen.</p>
-      <div class="guide-sound-demo">🔊 Sound: Momentum</div>
+      <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page and switch it On — get an audio alert without needing to keep watching the screen.</p>
+      <div class="guide-sound-demo">🔊 Sound: On</div>
       <ul class="guide-legend" style="margin-top:10px;">
-        <li>📈 <b>Rising chime</b> — a ticker's score just crossed 100 (building momentum).</li>
-        <li>🔔🔔 <b>Two-tone bell</b> — a ticker's first appearance today (only in "All new stocks" mode).</li>
-        <li>🔔 <b>Single bell</b> — a repeat appearance of the same ticker (only in "All new stocks" mode).</li>
+        <li>📈 <b>Rising chime</b> — a ticker's score just crossed 100 (building momentum). This is the only alert sound.</li>
       </ul>
       <p class="hint" style="margin-top:12px;">One last thing — if anything here is confusing or you think of something that would make this more useful, tap <b>💬 Feedback</b> in the footer any time. Your feedback genuinely shapes what we build next.</p>
     </div>
@@ -1344,21 +1338,24 @@
   });
 
   // ── Sound alert (mode persisted across visits) ──────────────────────────
-  // Three modes instead of the old simple on/off: "off", "momentum"
-  // (only the rising-chime alert when a ticker's score crosses 100 —
-  // listed first in the menu since it's the lighter-weight option), and
-  // "all" (every new-ticker chime PLUS the momentum chime).
+  // v0.142+ — simplified back to plain On/Off. "On" plays only the
+  // rising-chime momentum alert (score crosses 100); the separate
+  // new-ticker-appearance chime that used to exist in "All new stocks"
+  // mode has been removed entirely.
   const SOUND_MODE_STORAGE = "mb_sound_mode";
   const SOUND_KEY_STORAGE_LEGACY = "mb_sound_on";   // old binary pref — migrated once below, then unused
   function loadSoundMode(){
     try {
       const saved = localStorage.getItem(SOUND_MODE_STORAGE);
-      if (saved === "off" || saved === "momentum" || saved === "all") return saved;
-      // First run after this update — carry a returning visitor's old
-      // binary preference forward instead of silently resetting them to
-      // Off: "on" becomes "all" (closest match to their old experience).
+      if (saved === "on") return "on";
+      if (saved === "off") return "off";
+      // v0.142+ — a saved "momentum" or "all" from before this update
+      // both become "on" (the only remaining sound-producing state).
+      if (saved === "momentum" || saved === "all") return "on";
+      // First run ever — carry a returning visitor's old binary
+      // preference forward instead of silently resetting them to Off.
       const legacy = localStorage.getItem(SOUND_KEY_STORAGE_LEGACY);
-      return legacy === "1" ? "all" : "off";
+      return legacy === "1" ? "on" : "off";
     } catch(e){ return "off"; }
   }
   function saveSoundMode(){
@@ -1375,12 +1372,12 @@
   const soundLabel = document.getElementById("sound-label");
   const soundMenu = document.getElementById("sound-menu");
   function applySoundUI(){
-    const on = soundMode !== "off";
+    const on = soundMode === "on";
     soundBtn.classList.toggle("on", on);
     if (on) soundBtn.classList.remove("sound-hint");   // stop the nudge once they've noticed it
     soundBtn.setAttribute("aria-pressed", String(on));
     soundIcon.textContent = on ? "🔊" : "🔇";
-    soundLabel.textContent = !on ? "Sound: Off" : (soundMode === "momentum" ? "Sound: Momentum" : "Sound: On");
+    soundLabel.textContent = on ? "Sound: On" : "Sound: Off";
     soundMenu.querySelectorAll(".sound-menu-item").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.mode === soundMode);
     });
@@ -1392,7 +1389,7 @@
   // suspended state) and this one-time listener resumes it the moment
   // the visitor interacts with the page at all, rather than waiting for
   // them to specifically click the sound button again.
-  if (soundMode !== "off"){
+  if (soundMode === "on"){
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const resumeOnce = () => {
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
@@ -1412,7 +1409,7 @@
       soundMode = btn.dataset.mode;
       applySoundUI();
       saveSoundMode();
-      if (soundMode !== "off" && !audioCtx){
+      if (soundMode === "on" && !audioCtx){
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
       soundMenu.classList.remove("open");
@@ -1739,21 +1736,11 @@
     // always update below regardless of what happens with audio, so a
     // sound failure can never again turn into a permanent alert loop.
     //
-    // v0.139+: "all" mode plays the new-ticker chimes below (same as the
-    // old always-on behavior); "momentum" mode skips those entirely and
-    // only plays when a ticker's score crosses 100 from below — which
-    // fires in BOTH "momentum" and "all" modes, since "all" means "new
-    // stocks IN ADDITION TO momentum," not "instead of."
-    if (knownSymsForChannel !== null && soundMode !== "off"){
+    // v0.142+ — the new-ticker-appearance chime was removed entirely.
+    // The only remaining sound is the momentum chime (score crosses 100
+    // from below), which plays whenever Sound is On.
+    if (knownSymsForChannel !== null && soundMode === "on"){
       entries.forEach(d => {
-        if (soundMode === "all" && !knownSymsForChannel.has(d.sym)){
-          try {
-            if (d.visit && d.visit > 1) playAlertBeepRepeat();
-            else playAlertBeepFirst();
-          } catch (e) {
-            console.warn("Sound alert failed (tracker still advances normally):", e);
-          }
-        }
         if (d._score >= 100 && momentumAlertedForChannel && !momentumAlertedForChannel.has(d.sym)){
           try {
             playAlertMomentum();
