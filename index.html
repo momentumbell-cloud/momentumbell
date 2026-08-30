@@ -602,7 +602,7 @@
         <div class="tab-tooltip" id="tab-tooltip-normal">Loading current criteria…</div>
       </div>
       <div class="channel-tab-wrap">
-        <button class="channel-tab" data-channel="focused" type="button">Focused</button>
+        <button class="channel-tab" data-channel="focused" type="button">Focus</button>
         <div class="tab-tooltip" id="tab-tooltip-focused">Loading current criteria…</div>
       </div>
     </div>
@@ -641,7 +641,7 @@
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
     <h2>
-      Removed from watchlist today — no longer matching the criteria, number shown is max Change% reached
+      Dropped-out tickers
       <i class="info-dot">i</i>
       <div class="legend" id="drop-criteria-legend" style="width:230px;">
         Loading current removal criteria…
@@ -666,7 +666,7 @@
           </ul>
         </div>
         <div class="criteria-section">
-          <h4>🎯 Focused</h4>
+          <h4>🎯 Focus List</h4>
           <ul id="criteria-list-focused">
             <li>Loading current criteria…</li>
           </ul>
@@ -803,7 +803,11 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref("live/watchlist");
-  const refFocused = db.ref("live/watchlist_focused");
+  // v0.141+ — refFocused removed. Focus list is now computed client-side
+  // from `ref` (All Movers) + criteriaRefFocused (MB Funnel) — see
+  // computeFocusData/recomputeFocusData below. The Cockpit may still be
+  // pushing to live/watchlist_focused (harmless, simply unread here) —
+  // safe to retire that push server-side too in a later cleanup pass.
   const criteriaRef = db.ref("live/criteria");
   const criteriaRefFocused = db.ref("live/criteria_focused");
   const statusRef = db.ref("live/status");
@@ -1105,9 +1109,10 @@
       return;
     }
     const graceMin = c.drop_grace_min != null ? Number(c.drop_grace_min) : null;
-    dropLegend.textContent = graceMin != null
-      ? `A ticker lands here after it stops matching the criteria above continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand. This is expected behavior, not an error.`
-      : "A ticker lands here after it stops matching the qualifying criteria for a sustained period — or if it's removed by hand. This is expected behavior, not an error.";
+    const base = graceMin != null
+      ? `A ticker lands here after it stops matching the All Movers criteria continuously for ${graceMin} minute${graceMin === 1 ? "" : "s"} — or if it's removed by hand.`
+      : "A ticker lands here after it stops matching the All Movers criteria for a sustained period — or if it's removed by hand.";
+    dropLegend.textContent = base + " Number shown is the max Change% it reached before dropping. Same list regardless of which tab (All Movers / Focus) you're viewing. This is expected behavior, not an error.";
   }
   // Tab hover tooltips — same criteria data as the Criteria panel, but
   // right on the tab itself so a visitor can see what each one means
@@ -1155,11 +1160,10 @@
     saveChannelPref();
     updateChannelTabsUI();
     render(activeChannel === "focused" ? lastDataFocused : lastDataNormal);
-    // The Criteria info panel always shows BOTH channels at once (see
-    // renderCriteriaList calls below) — only the Dropped section's own
-    // explanatory legend actually needs to track the active tab, since
-    // the Dropped list itself only ever shows the active channel's drops.
-    updateDropLegend(activeChannel === "focused" ? lastCriteriaFocused : lastCriteriaNormal);
+    // v0.141+ — the Dropped-out tickers section is now the SAME list
+    // regardless of which tab is active (it's always driven by the MB
+    // Filter/All Movers criteria — see the Cockpit redesign notes), so
+    // switching tabs no longer needs to also switch the legend.
   }
   if (channelTabsEl){
     channelTabsEl.querySelectorAll(".channel-tab").forEach(btn => {
@@ -1177,13 +1181,17 @@
     lastCriteriaNormal = snap.val();
     renderCriteriaList(criteriaListNormal, lastCriteriaNormal);
     renderTabTooltip(document.getElementById("tab-tooltip-normal"), lastCriteriaNormal, false);
-    if (activeChannel === "normal") updateDropLegend(lastCriteriaNormal);
+    updateDropLegend(lastCriteriaNormal);   // v0.141+ — always the MB Filter's own criteria now, the Dropped-out list is shared across both tabs
   });
   criteriaRefFocused.on("value", snap => {
     lastCriteriaFocused = snap.val();
     renderCriteriaList(criteriaListFocused, lastCriteriaFocused);
     renderTabTooltip(document.getElementById("tab-tooltip-focused"), lastCriteriaFocused, true);
-    if (activeChannel === "focused") updateDropLegend(lastCriteriaFocused);
+    // v0.141+ — this is now the MB FUNNEL. A threshold change here can
+    // change which All Movers tickers currently qualify for Focus, so
+    // recompute it immediately rather than waiting for the next watchlist tick.
+    recomputeFocusData();
+    if (activeChannel === "focused") render(lastDataFocused);
   });
 
   // ── Maintenance Mode banner ──────────────────────────────────────────
@@ -1858,7 +1866,12 @@
 
     emptyEl.style.display = displayEntries.length ? "none" : "block";
     if (!displayEntries.length) updateEmptyMessage();
-    renderDropped(data);
+    // v0.141+ — Dropped-out tickers is now the SAME list regardless of
+    // which tab is active (always driven by the MB Filter/All Movers
+    // data), not the currently-rendered channel's own data — Focus no
+    // longer has independent drop tracking since it's just a filtered
+    // view of All Movers.
+    renderDropped(lastDataNormal);
   }
 
   const emptyMainEl = document.getElementById("empty-main");
@@ -1906,15 +1919,40 @@
     return n + (s[(v-20)%10] || s[v] || s[0]);
   }
 
+  // v0.141+ — Focus list (formerly "Focused") is no longer its own live
+  // Firebase feed pushed by the Cockpit. Per the redesign, funneling now
+  // happens in the website itself: this filters the SAME All Movers data
+  // (lastDataNormal) against the MB Funnel's thresholds (lastCriteriaFocused
+  // — despite the variable name kept as-is to avoid a wider rename, this
+  // now holds MB Funnel values, not old personal-scanner values). A
+  // ticker can only ever appear in Focus if it's also currently in All
+  // Movers, by construction — there's no separate scan behind it anymore.
+  function computeFocusData(normalData, c){
+    if (!normalData || !c) return {};
+    const minP  = Number(c.min_price);
+    const maxP  = c.max_price != null ? Number(c.max_price) : null;
+    const minChg = Number(c.min_chg_pct);
+    const minVol = Number(c.min_usd_vol);
+    const out = {};
+    Object.values(normalData).forEach(d => {
+      if (!d || d.active === false) return;             // skip dropped/inactive All Movers rows
+      if (d.usd_vol == null) return;                     // no volume data yet — fail closed, same principle as the Cockpit's own CP Funnel
+      if (d.price == null || d.price < minP) return;
+      if (maxP != null && d.price > maxP) return;
+      if ((d.chg ?? -Infinity) < minChg) return;
+      if (d.usd_vol < minVol) return;
+      out[d.sym] = d;
+    });
+    return out;
+  }
+  function recomputeFocusData(){
+    lastDataFocused = computeFocusData(lastDataNormal, lastCriteriaFocused);
+  }
+
   ref.on("value", snap => {
     lastDataNormal = snap.val();
-    if (activeChannel === "normal") render(lastDataNormal);
-  }, err => {
-    console.error(err);
-  });
-  refFocused.on("value", snap => {
-    lastDataFocused = snap.val();
-    if (activeChannel === "focused") render(lastDataFocused);
+    recomputeFocusData();
+    render(activeChannel === "focused" ? lastDataFocused : lastDataNormal);
   }, err => {
     console.error(err);
   });
