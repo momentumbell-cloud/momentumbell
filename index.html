@@ -401,7 +401,7 @@
   .score.warm{ color:var(--warn); }
   .score.cool{ color:var(--dim); }
   .score.extreme{
-    color:#ff6a1a; text-shadow:0 0 8px rgba(255,106,26,.65);
+    color:var(--text); text-shadow:0 0 8px rgba(255,106,26,.65);
     letter-spacing:.01em;
   }
   /* Extreme-hot (score > 500) — a row this hot doesn't just flash once,
@@ -1011,6 +1011,17 @@
   // periodic recheck.
   let firebaseConnected = true;
   let lastStatus = null;
+  // v0.150+ — was flipping to OFFLINE/RECONNECTING the instant a single
+  // ~15s heartbeat went stale (25s), which reads as constant flickering
+  // for any brief blip (a network hiccup, a moment of Firebase write
+  // delay, the Cockpit machine waking from sleep) even though the feed
+  // recovers seconds later. Now debounced: a non-live condition has to
+  // persist CONTINUOUSLY for 5 full minutes before the label actually
+  // changes — any live heartbeat arriving before then resets the clock
+  // and the label never moves. Reverting FROM offline back TO live is
+  // still instant either way, only the transition INTO offline is held.
+  const OFFLINE_DEBOUNCE_MS = 5 * 60 * 1000;
+  let notLiveSince = null;
   connectedRef.on("value", snap => {
     firebaseConnected = snap.val() === true;
     renderLiveIndicator();
@@ -1019,20 +1030,36 @@
     lastStatus = snap.val();
     renderLiveIndicator();
   });
-  setInterval(renderLiveIndicator, 5000);   // catches staleness even with no new pushes at all
+  setInterval(renderLiveIndicator, 5000);   // catches staleness even with no new pushes at all, and lets the 5-min debounce actually elapse
 
   function renderLiveIndicator(){
     const now = Date.now();
     const scriptOnline = !!(lastStatus && lastStatus.online === true
                              && (now - (lastStatus.ts || 0)) < STATUS_STALE_MS);
+    const isLiveNow = firebaseConnected && scriptOnline;
     liveDot.classList.remove("offline", "warn");
-    if (!firebaseConnected){
-      liveLabel.textContent = "RECONNECTING";
-      liveDot.classList.add("warn");
-    } else if (scriptOnline){
+
+    if (isLiveNow){
+      notLiveSince = null;
       liveLabel.textContent = "LIVE";
+      return;
+    }
+    if (notLiveSince === null) notLiveSince = now;
+    if (now - notLiveSince < OFFLINE_DEBOUNCE_MS){
+      // Within the 5-minute grace period — still shown as LIVE even
+      // though the underlying condition right now technically isn't.
+      liveLabel.textContent = "LIVE";
+      return;
+    }
+    // v0.150+ — shortened on mobile (a narrow header has no room for
+    // "OFFLINE"/"RECONNECTING" without wrapping the whole header row
+    // down, pushing the scanner list itself down with it).
+    const isMobile = window.matchMedia("(max-width: 720px)").matches;
+    if (!firebaseConnected){
+      liveLabel.textContent = isMobile ? "RECONN" : "RECONNECTING";
+      liveDot.classList.add("warn");
     } else {
-      liveLabel.textContent = "OFFLINE";
+      liveLabel.textContent = isMobile ? "OFF" : "OFFLINE";
       liveDot.classList.add("offline");
     }
   }
