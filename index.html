@@ -569,7 +569,8 @@
       </button>
       <i class="info-dot">i</i>
       <div class="legend">
-        <div class="legend-row" style="align-items:flex-start;">📈 Rising chime — plays when a ticker's Momentum Bell Score just crossed 100. That's the only alert sound; no sound plays for a ticker simply appearing on the list.</div>
+        <div class="legend-row" style="align-items:flex-start;">📈 Rising chime — plays when a ticker's Momentum Bell Score just crossed 100.</div>
+        <div class="legend-row" style="align-items:flex-start; margin-top:6px;">🔥 Explosion — plays when a ticker's score crosses 500 (the 🔥 fire banner).</div>
       </div>
     </div>
     <div class="live-wrap">
@@ -749,7 +750,8 @@
       <p style="font-size:13px; margin:0 0 6px;">Tap the sound pill at the top of the page and switch it On — get an audio alert without needing to keep watching the screen.</p>
       <div class="guide-sound-demo">🔊 Sound: On</div>
       <ul class="guide-legend" style="margin-top:10px;">
-        <li>📈 <b>Rising chime</b> — a ticker's score just crossed 100 (building momentum). This is the only alert sound.</li>
+        <li>📈 <b>Rising chime</b> — a ticker's score just crossed 100 (building momentum).</li>
+        <li>🔥 <b>Explosion</b> — a ticker's score just crossed 500 (the 🔥 fire banner).</li>
       </ul>
       <p class="hint" style="margin-top:12px;">One last thing — if anything here is confusing or you think of something that would make this more useful, tap <b>💬 Feedback</b> in the footer any time. Your feedback genuinely shapes what we build next.</p>
     </div>
@@ -1430,6 +1432,8 @@
   let knownSymsFocused = null;  // same, but tracked independently for the Focused feed — see the fix note in render()
   let momentumAlertedNormal = null;   // symbols currently >=100 that have already had their momentum chime played, per channel
   let momentumAlertedFocused = null;
+  let fireAlertedNormal = null;   // v0.152+ — same edge-trigger pattern, but for score > 500 (the 🔥 fire banner) and playAlertFire instead
+  let fireAlertedFocused = null;
   const soundBtn = document.getElementById("sound-toggle");
   const soundIcon = document.getElementById("sound-icon");
   const soundLabel = document.getElementById("sound-label");
@@ -1543,6 +1547,51 @@
     ringBell(now,        660,  0.26, 0.55);
     ringBell(now + 0.14, 880,  0.28, 0.55);
     ringBell(now + 0.28, 1100, 0.32, 0.65);
+  }
+  function playAlertFire(){
+    // v0.152+ — a distinct "explosion/burning" sound for when the 🔥
+    // fire banner itself appears (score > 500), separate from the
+    // regular momentum chime (score crosses 100) — built entirely from
+    // raw noise + oscillators, no audio file needed, same self-contained
+    // approach as the rest of the site's alerts.
+    ensureAudioCtx();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+
+    // Noise burst run through a lowpass filter with a falling cutoff —
+    // reads as a dull "whoosh/boom", distinct from the metallic bell
+    // tones used everywhere else on the site.
+    const dur = 0.55;
+    const bufferSize = Math.floor(audioCtx.sampleRate * dur);
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++){
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);   // decaying noise
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1800, now);
+    filter.frequency.exponentialRampToValueAtTime(80, now + dur);
+    filter.Q.value = 0.8;
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0.9, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    noise.connect(filter); filter.connect(noiseGain); noiseGain.connect(audioCtx.destination);
+    noise.start(now); noise.stop(now + dur + 0.05);
+
+    // A low descending "thud" underneath for extra weight — reads like
+    // a distant impact rather than just a hiss.
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(140, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.4);
+    const oscGain = audioCtx.createGain();
+    oscGain.gain.setValueAtTime(0.7, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+    osc.connect(oscGain); oscGain.connect(audioCtx.destination);
+    osc.start(now); osc.stop(now + 0.5);
   }
 
   // ── News popup — one shared, fixed-position tooltip, click-driven so it
@@ -1720,7 +1769,17 @@
     // from All Movers because it isn't (yet) in Focus — see render()'s
     // displayEntries. Note it plainly so it doesn't look like a Focus bug.
     const amNoteEl = el.querySelector(".all-movers-note");
-    if (amNoteEl) amNoteEl.style.display = d._fromAllMovers ? "" : "none";
+    if (amNoteEl){
+      if (d._movedToAllMovers){
+        amNoteEl.textContent = "★ moved to All Movers";
+        amNoteEl.style.display = "";
+      } else if (d._fromAllMovers){
+        amNoteEl.textContent = "in All Movers";
+        amNoteEl.style.display = "";
+      } else {
+        amNoteEl.style.display = "none";
+      }
+    }
 
     const newsHtml = news.length
       ? `<span class="news-wrap" data-sym="${escapeHtml(d.sym)}"><span class="news-icon">🗞</span></span>`
@@ -1787,7 +1846,9 @@
     // ever gets compared against that SAME channel's own previous data.
     const knownSymsForChannel = activeChannel === "focused" ? knownSymsFocused : knownSymsNormal;
     const momentumAlertedForChannel = activeChannel === "focused" ? momentumAlertedFocused : momentumAlertedNormal;
+    const fireAlertedForChannel = activeChannel === "focused" ? fireAlertedFocused : fireAlertedNormal;
     const currentAbove100 = new Set(entries.filter(d => d._score >= 100).map(d => d.sym));
+    const currentAboveFire = new Set(entries.filter(d => d._score > 500).map(d => d.sym));
     // v0.137+ FIX — the REAL, long-standing cause of "keeps bursting
     // continuous sound alerts until I close and reopen": browsers can
     // put an AudioContext into a "closed" state to reclaim resources
@@ -1816,14 +1877,28 @@
             console.warn("Momentum sound alert failed (tracker still advances normally):", e);
           }
         }
+        // v0.152+ — separate, distinct sound for the 🔥 fire banner
+        // itself (score > 500) — same edge-trigger pattern as the
+        // momentum chime above (only fires on the moment it crosses in,
+        // not on every tick while it stays above), just a higher bar
+        // and a different, more "explosive" sound.
+        if (d._score > 500 && fireAlertedForChannel && !fireAlertedForChannel.has(d.sym)){
+          try {
+            playAlertFire();
+          } catch (e) {
+            console.warn("Fire sound alert failed (tracker still advances normally):", e);
+          }
+        }
       });
     }
     if (activeChannel === "focused"){
       knownSymsFocused = currentSyms;
       momentumAlertedFocused = currentAbove100;
+      fireAlertedFocused = currentAboveFire;
     } else {
       knownSymsNormal = currentSyms;
       momentumAlertedNormal = currentAbove100;
+      fireAlertedNormal = currentAboveFire;
     }
 
     // Search filtering happens AFTER sound/new-ticker tracking above is
@@ -2127,11 +2202,23 @@
     Object.values(normalData).forEach(d => {
       if (!d || d.active === false) return;             // skip dropped/inactive All Movers rows
       if (d.usd_vol == null) return;                     // no volume data yet — fail closed, same principle as the Cockpit's own CP Funnel
-      if (d.price == null || d.price < minP) return;
-      if (maxP != null && d.price > maxP) return;
-      if ((d.chg ?? -Infinity) < minChg) return;
-      if (d.usd_vol < minVol) return;
-      out[d.sym] = d;
+      const passes = d.price != null && d.price >= minP
+                    && (maxP == null || d.price <= maxP)
+                    && (d.chg ?? -Infinity) >= minChg
+                    && d.usd_vol >= minVol;
+      if (passes){
+        out[d.sym] = d;
+        return;
+      }
+      // v0.152+ — a favorited (starred) ticker that no longer matches
+      // Focus criteria stays visible here instead of just vanishing —
+      // labeled as having moved to All Movers rather than silently
+      // dropped, since the person starred it specifically to keep an
+      // eye on it. It's still genuinely gone from the funnel; this is
+      // a labeled exception, not a change to the funnel logic itself.
+      if (isStarred(d.sym)){
+        out[d.sym] = { ...d, _movedToAllMovers: true };
+      }
     });
     return out;
   }
