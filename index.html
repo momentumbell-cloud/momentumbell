@@ -348,6 +348,42 @@
   .legend-row{ display:flex; align-items:center; gap:7px; color:var(--text); }
   .legend-sw{ width:9px; height:9px; border-radius:50%; flex:none; }
   .rows{ display:flex; flex-direction:column; }
+
+  /* v0.154+ — scanner-viewport: a fixed-height, independently-scrollable
+     box around the skeleton/rows/empty-state, DESKTOP ONLY. Two reasons
+     at once: (1) the top of the list — where users actually watch — no
+     longer shifts around as the list's total length changes, and a
+     planned future ad slot right below this box stays put too instead
+     of drifting up/down with the results; (2) it just reads as more
+     deliberate/professional than an unbounded page-length list. Mobile
+     is untouched — a nested scroll region inside an already-scrolling
+     mobile page is a worse experience, not a better one, so mobile
+     keeps today's natural full-length flow. */
+  @media (min-width: 721px){
+    .scanner-viewport{
+      height: 460px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,.015);
+    }
+    .scanner-viewport::-webkit-scrollbar{ width:8px; }
+    .scanner-viewport::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+  }
+
+  /* Reserved for a future ad slot — see the HTML comment beside
+     #ad-slot-scanner. Empty and invisible until there's something real
+     to put in it; desktop-only by design (see that comment for why). */
+  .ad-slot-reserved{ display:none; }
+  @media (min-width: 721px){
+    /* When populated later: give it a fixed height here too (matching
+       whatever ad unit is used, e.g. 100px for a leaderboard) so it
+       reserves its footprint the same way .scanner-viewport does above
+       — the whole point of building this in now is that turning it on
+       later never shifts anything else on the page. */
+  }
+
   .row{
     display:grid; grid-template-columns:1.15fr 0.85fr 0.85fr 1.15fr 0.95fr 0.6fr;
     align-items:center; padding:14px; border-bottom:1px solid var(--line);
@@ -479,12 +515,24 @@
     color:var(--dim); font-weight:600; margin:0; padding:16px 14px 8px;
     border-top:1px solid var(--line); line-height:1.5;
   }
-  .dropped-rows{ display:flex; flex-wrap:wrap; border-top:1px solid var(--line); border-left:1px solid var(--line); }
+  /* v0.154+ — one horizontally-scrollable row instead of a wrapping
+     grid that grew taller as more tickers dropped — saves vertical
+     space and reads cleaner. Each ticker keeps its natural width
+     (flex:0 0 auto, no wrap) so the row just scrolls sideways instead
+     of squeezing or stacking. */
+  .dropped-rows{
+    display:flex; flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    -webkit-overflow-scrolling:touch;
+  }
+  .dropped-rows::-webkit-scrollbar{ height:8px; }
+  .dropped-rows::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
   .dropped-row{
     display:flex; align-items:center; gap:8px;
     padding:10px 16px;
-    border-right:1px solid var(--line); border-bottom:1px solid var(--line);
+    border-right:1px solid var(--line);
     position:relative; cursor:pointer;
+    flex:0 0 auto; white-space:nowrap;
   }
   .dropped-row .sym{ font-size:13px; color:var(--dim); font-weight:700; }
   .dropped-row .maxchg{ font-size:13px; color:var(--text); font-family:var(--mono); font-weight:600; }
@@ -502,9 +550,12 @@
   .footer-note a:hover{ color:var(--text); }
 
   /* Small ET clock, tucked in a corner so it never competes with the
-     watchlist itself for attention — hours:minutes only, no seconds
-     (a ticking number is far more distracting than a static one). The
-     session badge sits directly above it in the same corner stack. */
+     watchlist itself for attention. v0.154+ — now shows seconds and
+     updates every second (was hours:minutes only, updated every 15s) —
+     explicitly requested for precision ("it reflects the site quality"),
+     overriding the earlier no-seconds design call below the previous
+     concern about a ticking number being distracting.
+     The session badge sits directly above it in the same corner stack. */
   .et-clock-wrap{
     position:fixed; bottom:10px; right:12px; z-index:50;
     display:flex; flex-direction:column; align-items:flex-end; gap:6px;
@@ -614,18 +665,32 @@
     <div class="sortable" data-key="maxchg">Max Change <span class="sort-arrow" data-key="maxchg"></span></div>
     <div>News</div>
   </div>
-  <div class="skeleton" id="skeleton">
-    <div class="skel-row"></div>
-    <div class="skel-row"></div>
-    <div class="skel-row"></div>
-    <div class="skel-row"></div>
+  <div class="scanner-viewport" id="scanner-viewport">
+    <div class="skeleton" id="skeleton">
+      <div class="skel-row"></div>
+      <div class="skel-row"></div>
+      <div class="skel-row"></div>
+      <div class="skel-row"></div>
+    </div>
+    <div class="rows" id="rows"></div>
+    <div class="empty" id="empty" style="display:none;">
+      <span id="empty-main">No active movers right now.</span><br>
+      <b>Momentum Bell</b> updates the instant a ticker qualifies — leave this open.
+      <span class="empty-sub" id="empty-sub"></span>
+    </div>
   </div>
-  <div class="rows" id="rows"></div>
-  <div class="empty" id="empty" style="display:none;">
-    <span id="empty-main">No active movers right now.</span><br>
-    <b>Momentum Bell</b> updates the instant a ticker qualifies — leave this open.
-    <span class="empty-sub" id="empty-sub"></span>
-  </div>
+
+  <!-- v0.154+ — reserved for a future ad slot (desktop only), planned
+       into the layout now so adding the real thing later is a small CSS/
+       HTML change instead of a page restructure that would disturb
+       users once they're used to this layout. Empty and display:none
+       for now — no visible placeholder box until there's something
+       real to put in it. Sits directly below the fixed-height
+       .scanner-viewport above (so it never moves as results change) and
+       above .dropped-section. Intentionally desktop-only: a nested
+       scroll region plus an ad squeezed into mobile's already-tight
+       vertical space would hurt the mobile experience specifically. -->
+  <div class="ad-slot-reserved" id="ad-slot-scanner"></div>
 
   <div class="dropped-section" id="dropped-section" style="display:none;">
     <h2>
@@ -844,22 +909,31 @@
     return new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d); // YYYY-MM-DD
   }
 
-  // ── ET CLOCK — small corner badge, hours:minutes only ───────────────────
+  // ── ET CLOCK — small corner badge ────────────────────────────────────
   // "EST" is what traders call it colloquially, but the US market actually
   // runs on Eastern Time (which is EDT for most of the year) — using the
   // America/New_York timezone keeps this correct year-round instead of
   // being off by an hour every summer.
+  //
+  // v0.154+ — was updating every 15s showing only hour:minute, which
+  // could visibly lag a real minute rollover by up to 15 seconds — not
+  // good enough for something meant to read as precise. Now shows
+  // seconds and updates every second, so it's never more than a moment
+  // behind the real clock, and self-corrects any drift from setInterval
+  // by always reading the actual current time rather than just counting
+  // ticks.
   const etClockEl = document.getElementById("et-clock");
   function updateETClock(){
     if(!etClockEl) return;
     const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true
+      timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
+      second: "2-digit", hour12: true
     }).formatToParts(new Date());
     const get = t => parts.find(p => p.type === t)?.value || "";
-    etClockEl.textContent = `${get("hour")}:${get("minute")} ${get("dayPeriod")} ET`;
+    etClockEl.textContent = `${get("hour")}:${get("minute")}:${get("second")} ${get("dayPeriod")} ET`;
   }
   updateETClock();
-  setInterval(updateETClock, 15000);   // recomputed often enough to never visibly lag a minute rollover, without ever showing seconds
+  setInterval(updateETClock, 1000);
 
   // ── Market session badge ─────────────────────────────────────────────
   // v0.143+ — now accounts for the NYSE holiday calendar (full closures
